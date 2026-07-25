@@ -1,0 +1,154 @@
+import Link from "next/link";
+import { notFound } from "next/navigation";
+import { StatusBadge } from "@/components/StatusBadge";
+import { prisma } from "@/lib/db";
+import { DraftActions } from "./DraftActions";
+import { DraftEditForm } from "./DraftEditForm";
+
+export const dynamic = "force-dynamic";
+
+type Props = { params: Promise<{ id: string }> };
+
+export default async function DraftDetailPage({ params }: Props) {
+  const { id } = await params;
+  const draft = await prisma.productDraft.findUnique({
+    where: { id },
+    include: {
+      sourceProduct: true,
+      listings: true,
+      publishLogs: { orderBy: { createdAt: "desc" }, take: 10 },
+      syncJobs: { orderBy: { createdAt: "desc" }, take: 10 },
+    },
+  });
+
+  if (!draft) notFound();
+
+  const images = Array.isArray(draft.images) ? (draft.images as string[]) : [];
+  const breakdown = draft.costBreakdown as Record<string, number>;
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <Link href="/drafts" className="text-sm text-sky-800">
+            ← 목록
+          </Link>
+          <h2 className="mt-2 font-[family-name:var(--font-display)] text-3xl">
+            {draft.titleKo}
+          </h2>
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            <StatusBadge status={draft.status} />
+            {draft.isFallbackData ? (
+              <StatusBadge status="FALLBACK" />
+            ) : null}
+          </div>
+        </div>
+        <a
+          href={draft.sourceProduct.sourceUrl}
+          target="_blank"
+          rel="noreferrer"
+          className="rounded-full border border-zinc-300 bg-white px-4 py-2 text-sm"
+        >
+          원본 보기
+        </a>
+      </div>
+
+      <DraftActions id={draft.id} status={draft.status} />
+
+      <div className="grid gap-6 lg:grid-cols-2">
+        <section className="space-y-4 rounded-2xl border border-zinc-200 bg-white/90 p-5">
+          <h3 className="font-semibold">원본 / 가격</h3>
+          <dl className="grid grid-cols-2 gap-3 text-sm">
+            <div>
+              <dt className="text-zinc-500">ASIN</dt>
+              <dd className="font-mono">{draft.sourceProduct.externalId}</dd>
+            </div>
+            <div>
+              <dt className="text-zinc-500">원가</dt>
+              <dd>
+                ${Number(draft.sourceProduct.sourcePrice)} /{" "}
+                {breakdown.sourcePriceKrw?.toLocaleString("ko-KR")}원
+              </dd>
+            </div>
+            <div>
+              <dt className="text-zinc-500">판매가</dt>
+              <dd className="text-lg font-semibold">
+                {draft.salePriceKrw.toLocaleString("ko-KR")}원
+              </dd>
+            </div>
+            <div>
+              <dt className="text-zinc-500">재고</dt>
+              <dd>{draft.sourceProduct.inStock ? "있음" : "없음"}</dd>
+            </div>
+          </dl>
+          <div className="grid grid-cols-3 gap-2">
+            {images.slice(0, 6).map((src) => (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                key={src}
+                src={src}
+                alt=""
+                className="aspect-square rounded-lg border border-zinc-200 object-cover"
+              />
+            ))}
+          </div>
+        </section>
+
+        <DraftEditForm
+          id={draft.id}
+          titleKo={draft.titleKo}
+          salePriceKrw={draft.salePriceKrw}
+          detailHtml={draft.detailHtml}
+          noticeText={draft.noticeText}
+          reviewNote={draft.reviewNote}
+        />
+      </div>
+
+      <section className="rounded-2xl border border-zinc-200 bg-white/90 p-5">
+        <h3 className="font-semibold">채널 리스팅</h3>
+        <ul className="mt-3 space-y-2 text-sm">
+          {draft.listings.map((listing) => (
+            <li key={listing.id} className="flex flex-wrap items-center gap-2">
+              <StatusBadge status={listing.channel} />
+              <StatusBadge status={listing.status} />
+              <span className="text-zinc-500">
+                {listing.externalProductId ?? "미발급"}
+              </span>
+            </li>
+          ))}
+        </ul>
+      </section>
+
+      <section className="grid gap-6 lg:grid-cols-2">
+        <div className="rounded-2xl border border-zinc-200 bg-white/90 p-5">
+          <h3 className="font-semibold">등록 로그</h3>
+          <ul className="mt-3 space-y-2 text-sm">
+            {draft.publishLogs.length === 0 ? (
+              <li className="text-zinc-500">아직 없음</li>
+            ) : (
+              draft.publishLogs.map((log) => (
+                <li key={log.id}>
+                  [{log.channel}] {log.success ? "OK" : "FAIL"} — {log.message}
+                </li>
+              ))
+            )}
+          </ul>
+        </div>
+        <div className="rounded-2xl border border-zinc-200 bg-white/90 p-5">
+          <h3 className="font-semibold">동기화 잡</h3>
+          <ul className="mt-3 space-y-2 text-sm">
+            {draft.syncJobs.length === 0 ? (
+              <li className="text-zinc-500">아직 없음</li>
+            ) : (
+              draft.syncJobs.map((job) => (
+                <li key={job.id}>
+                  [{job.type}] {job.status} — {job.message ?? "-"}
+                </li>
+              ))
+            )}
+          </ul>
+        </div>
+      </section>
+    </div>
+  );
+}
