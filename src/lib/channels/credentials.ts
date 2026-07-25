@@ -11,6 +11,12 @@ export type ChannelCredentialStatus = {
     productReady: boolean;
     productMissing: string[];
   };
+  elevenst: {
+    configured: boolean;
+    missing: string[];
+    productReady: boolean;
+    productMissing: string[];
+  };
 };
 
 function missingOf(keys: string[]): string[] {
@@ -29,6 +35,16 @@ export function isCoupangConfigured(): boolean {
     Boolean(process.env.COUPANG_ACCESS_KEY?.trim()) &&
     Boolean(process.env.COUPANG_SECRET_KEY?.trim()) &&
     Boolean(process.env.COUPANG_VENDOR_ID?.trim())
+  );
+}
+
+export function isElevenstConfigured(): boolean {
+  return (
+    Boolean(process.env.ELEVENST_API_KEY?.trim()) &&
+    Boolean(
+      process.env.ELEVENST_API_URL?.trim() ||
+        process.env.ELEVENST_OPENAPI_URL?.trim(),
+    )
   );
 }
 
@@ -64,6 +80,12 @@ export function getChannelCredentialStatus(): ChannelCredentialStatus {
   const smartProductMissing = smartStoreProductMissing();
   const coupangProductMissingKeys = coupangProductMissing();
 
+  const elevenstAuthMissing = missingOf(["ELEVENST_API_KEY"]).concat(
+    process.env.ELEVENST_API_URL?.trim() || process.env.ELEVENST_OPENAPI_URL?.trim()
+      ? []
+      : ["ELEVENST_API_URL"],
+  );
+
   return {
     smartstore: {
       configured: smartstoreAuthMissing.length === 0,
@@ -76,6 +98,13 @@ export function getChannelCredentialStatus(): ChannelCredentialStatus {
       missing: coupangAuthMissing,
       productReady: coupangAuthMissing.length === 0 && coupangProductMissingKeys.length === 0,
       productMissing: coupangProductMissingKeys,
+    },
+    elevenst: {
+      configured: elevenstAuthMissing.length === 0,
+      missing: elevenstAuthMissing,
+      // 상품 등록 live는 스켈레톤 — 키만으로 invoice stub→live 전환
+      productReady: false,
+      productMissing: elevenstAuthMissing.length === 0 ? ["ELEVENST_CATEGORY_MAP"] : [],
     },
   };
 }
@@ -97,6 +126,9 @@ export function credentialWarningMessages(status = getChannelCredentialStatus())
     messages.push(
       `쿠팡: 상품 등록용 env 부족 (${status.coupang.productMissing.join(", ")})`,
     );
+  }
+  if (!status.elevenst.configured) {
+    messages.push("11번가: API_KEY/URL 미설정 → 스텁 등록(실제 전송 없음)");
   }
   return messages;
 }

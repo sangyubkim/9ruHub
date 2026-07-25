@@ -17,12 +17,15 @@ describe("credentials", () => {
     vi.stubEnv("COUPANG_ACCESS_KEY", "");
     vi.stubEnv("COUPANG_SECRET_KEY", "");
     vi.stubEnv("COUPANG_VENDOR_ID", "");
+    vi.stubEnv("ELEVENST_API_KEY", "");
+    vi.stubEnv("ELEVENST_API_URL", "");
 
     expect(isSmartStoreConfigured()).toBe(false);
     expect(isCoupangConfigured()).toBe(false);
     const warnings = credentialWarningMessages(getChannelCredentialStatus());
     expect(warnings.some((w) => w.includes("스마트스토어"))).toBe(true);
     expect(warnings.some((w) => w.includes("쿠팡"))).toBe(true);
+    expect(warnings.some((w) => w.includes("11번가"))).toBe(true);
   });
 
   it("인증키만 있고 상품 env가 없으면 productReady=false", () => {

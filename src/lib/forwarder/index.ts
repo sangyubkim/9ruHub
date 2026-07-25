@@ -1,11 +1,10 @@
+import { HttpForwarderAdapter, isForwarderLiveConfigured } from "@/lib/forwarder/http";
 import { StubForwarderAdapter } from "@/lib/forwarder/stub";
 import type { ForwarderAdapter } from "@/lib/forwarder/types";
 
 export function getForwarderAdapter(): ForwarderAdapter {
-  const mode = (process.env.FORWARDER_ADAPTER ?? "stub").toLowerCase();
-  const hasKey = Boolean(process.env.FORWARDER_API_KEY?.trim());
-  if (mode === "live" && hasKey) {
-    console.warn("FORWARDER live 요청이나 공식 어댑터 미구현 → stub 폴백");
+  if (isForwarderLiveConfigured()) {
+    return new HttpForwarderAdapter();
   }
   return new StubForwarderAdapter();
 }
@@ -14,5 +13,9 @@ export type {
   ForwarderAdapter,
   ForwarderCreateRequest,
   ForwarderCreateResult,
+  ForwarderPollResult,
   ForwarderTrackResult,
+  ForwarderTrackingFetchResult,
 } from "@/lib/forwarder/types";
+export { stubForwarderTrackingNo, stubLocalTracking } from "@/lib/forwarder/stub";
+export { isForwarderLiveConfigured } from "@/lib/forwarder/http";

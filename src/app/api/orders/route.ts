@@ -30,7 +30,9 @@ export async function POST(request: Request) {
     };
 
     const channel =
-      body.channel === "SMARTSTORE" || body.channel === "COUPANG"
+      body.channel === "SMARTSTORE" ||
+      body.channel === "COUPANG" ||
+      body.channel === "ELEVENST"
         ? (body.channel as Channel)
         : undefined;
 

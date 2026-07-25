@@ -1,13 +1,23 @@
 import {
-  InvoiceRegisterStatus,
+  Channel,
   OrderStatus,
   Prisma,
   ShipmentStatus,
 } from "@/generated/prisma/client";
 import { getForwarderAdapter } from "@/lib/forwarder";
-import { getInvoiceRegisterAdapter } from "@/lib/invoice";
 import { prisma } from "@/lib/db";
+import {
+  registerInvoiceToChannels,
+  syncAllShipmentsFromForwarder,
+  syncShipmentFromForwarder,
+} from "@/lib/shipments/invoice-pipeline";
 import { getDefaultTenantId } from "@/lib/tenant";
+
+export {
+  registerInvoiceToChannels,
+  syncAllShipmentsFromForwarder,
+  syncShipmentFromForwarder,
+};
 
 function toJson(value: unknown): Prisma.InputJsonValue {
   return JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue;
@@ -134,51 +144,40 @@ export async function trackShipment(shipmentId: string, tenantId?: string) {
 }
 
 /**
- * 국내 송장번호를 채널에 자동등록(스텁)
+ * 국내 송장번호를 채널에 자동등록 (주문 채널 또는 지정 채널)
  */
 export async function registerChannelInvoice(
   shipmentId: string,
-  input: { localCarrier: string; localTrackingNo: string; tenantId?: string },
+  input: {
+    localCarrier?: string;
+    localTrackingNo?: string;
+    channels?: Channel[];
+    tenantId?: string;
+  },
 ) {
-  const tenantId = input.tenantId ?? (await getDefaultTenantId());
-  const shipment = await prisma.shipment.findFirst({
-    where: { id: shipmentId, tenantId },
-    include: { order: true },
-  });
-  if (!shipment) throw new Error("배송건 없음");
-  if (!shipment.order.channel) {
-    throw new Error("채널이 없는 주문은 송장 등록을 건너뜁니다.");
-  }
-
-  const adapter = getInvoiceRegisterAdapter();
-  const result = await adapter.register({
-    channel: shipment.order.channel,
-    orderExternalId: shipment.order.externalOrderId,
+  const result = await registerInvoiceToChannels(shipmentId, {
     localCarrier: input.localCarrier,
     localTrackingNo: input.localTrackingNo,
+    channels: input.channels,
+    tenantId: input.tenantId,
   });
-
-  const updated = await prisma.shipment.update({
-    where: { id: shipment.id },
-    data: {
-      localCarrier: input.localCarrier,
-      localTrackingNo: input.localTrackingNo,
-      channelInvoiceStatus: result.status as InvoiceRegisterStatus,
-      channelInvoicePayload: result.payload ? toJson(result.payload) : undefined,
-      status:
-        shipment.status === ShipmentStatus.AT_FORWARDER ||
-        shipment.status === ShipmentStatus.PENDING
-          ? ShipmentStatus.IN_TRANSIT
-          : shipment.status,
-      shippedAt: shipment.shippedAt ?? new Date(),
-    },
-    include: { order: true },
-  });
-
-  await prisma.order.update({
-    where: { id: shipment.orderId },
-    data: { status: OrderStatus.SHIPPED_TO_CUSTOMER },
-  });
-
-  return { shipment: updated, invoice: result };
+  const first = result.results[0];
+  return {
+    shipment: result.shipment,
+    invoice: first
+      ? {
+          success: first.success,
+          mode: first.mode,
+          status: first.status,
+          message: first.message,
+        }
+      : {
+          success: false,
+          mode: "stub" as const,
+          status: "FAILED",
+          message: "등록 대상 채널 없음",
+        },
+    results: result.results,
+    channels: result.channels,
+  };
 }

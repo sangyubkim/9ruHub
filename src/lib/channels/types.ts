@@ -38,7 +38,7 @@ export type SyncResult = {
 };
 
 export interface ChannelAdapter {
-  readonly channel: "SMARTSTORE" | "COUPANG";
+  readonly channel: "SMARTSTORE" | "COUPANG" | "ELEVENST";
   publish(payload: ChannelProductPayload): Promise<PublishResult>;
   syncPriceStock(payload: ChannelProductPayload): Promise<SyncResult>;
 }

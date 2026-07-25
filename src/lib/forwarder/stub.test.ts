@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { getForwarderAdapter } from "@/lib/forwarder";
 import { getInvoiceRegisterAdapter } from "@/lib/invoice";
+import { stubForwarderTrackingNo } from "@/lib/forwarder/stub";
 
 describe("forwarder + invoice stubs", () => {
   it("creates inbound tracking stub", async () => {
@@ -10,7 +11,7 @@ describe("forwarder + invoice stubs", () => {
       shipmentId: "ship12345678",
     });
     expect(result.mode).toBe("stub");
-    expect(result.trackingNo).toMatch(/^FWD-/);
+    expect(result.trackingNo).toBe(stubForwarderTrackingNo("ship12345678"));
   });
 
   it("registers channel invoice as stub", async () => {
