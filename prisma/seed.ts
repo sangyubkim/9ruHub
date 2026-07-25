@@ -89,7 +89,49 @@ async function main() {
     }
   }
 
-  console.log("Seed complete: demo tenant + owner + PriceRule (+ sample rec)");
+  // Step 2 sample order linked to product when available
+  const existingOrder = await prisma.order.findFirst({
+    where: { tenantId: tenant.id, externalOrderId: "SEED-ORDER-001" },
+  });
+  if (!existingOrder) {
+    const product = await prisma.product.findFirst({
+      where: { tenantId: tenant.id },
+    });
+    await prisma.order.create({
+      data: {
+        tenantId: tenant.id,
+        channel: "SMARTSTORE",
+        externalOrderId: "SEED-ORDER-001",
+        status: "PENDING",
+        customerName: "시드고객",
+        subtotalKrw: product?.salePriceKrw ?? 59000,
+        shippingFeeKrw: 0,
+        platformFeeKrw: 3000,
+        costKrw: product?.costKrw ?? 32000,
+        profitKrw:
+          (product?.salePriceKrw ?? 59000) -
+          (product?.costKrw ?? 32000) -
+          3000,
+        items: {
+          create: [
+            {
+              productId: product?.id,
+              title: product?.titleKo ?? product?.title ?? "시드 상품",
+              quantity: 1,
+              unitSalePriceKrw: product?.salePriceKrw ?? 59000,
+              unitCostKrw: product?.costKrw ?? 32000,
+              lineProfitKrw:
+                (product?.salePriceKrw ?? 59000) - (product?.costKrw ?? 32000),
+              sourceUrl: product?.sourceUrl,
+              purchaseStatus: "STUBBED",
+            },
+          ],
+        },
+      },
+    });
+  }
+
+  console.log("Seed complete: demo tenant + owner + PriceRule (+ sample rec/order)");
   console.log(`  tenantId=${tenant.id}`);
 }
 

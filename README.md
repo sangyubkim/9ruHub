@@ -10,7 +10,7 @@ Amazon US 소싱 → 초안 → 채널 등록/동기화에 더해, **SaaS 멀티
 |------|------|------|
 | 0 | SaaS DB/ERD (tenants, products, orders, shipments, AI) | **완료** |
 | 1 | 규칙 추천 + GPT 이유/상세 + 원클릭 초안 | **완료** |
-| 2 | 주문 관리 + 중국몰 자동주문 어댑터(스텁) | 진행 예정 |
+| 2 | 주문 관리 + 중국몰 자동주문 어댑터(스텁) | **완료** |
 | 3 | 배대지 + 송장 자동등록 어댑터 | 진행 예정 |
 | 4 | AI 수익분석 대시보드 + 운영 비서 | 진행 예정 |
 | 5 | SaaS 빌링 / 멀티유저 고도화 | 미착수 |
@@ -126,6 +126,17 @@ npm run recommend:generate
 
 점수는 `src/lib/recommend/score.ts` 규칙 엔진이 계산합니다. `OPENAI_API_KEY`가 있으면 이유/상세만 GPT, 없으면 템플릿 폴백.
 
+## Step 2 — 주문 / 중국몰 스텁
+
+```bash
+# UI: /orders
+# GET  /api/orders
+# POST /api/orders
+# POST /api/orders/:id/purchase   # China mall adapter (default stub)
+```
+
+`CHINA_MALL_ADAPTER=stub` (기본). 공식 API 연동 전까지 실결제 없이 `purchaseRef`만 기록합니다.
+
 ## 주요 API (현재)
 
 - `POST /api/drafts` `{ "url": "https://www.amazon.com/dp/ASIN" }`
@@ -135,6 +146,9 @@ npm run recommend:generate
 - `POST /api/drafts/:id/sync`
 - `GET|POST /api/recommendations`
 - `POST /api/recommendations/:id/accept|ignore`
+- `GET|POST /api/orders`
+- `GET|PATCH /api/orders/:id`
+- `POST /api/orders/:id/purchase`
 - `GET /api/channels/status`
 - `GET|POST /api/cron/sync`
 - `GET /api/templates/excel`
