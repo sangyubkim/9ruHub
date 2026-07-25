@@ -55,7 +55,41 @@ async function main() {
     },
   });
 
-  console.log("Seed complete: demo tenant + owner + PriceRule");
+  // Step 1 demo recommendation (rule score + template reason)
+  const demoProduct = await prisma.product.findFirst({
+    where: { tenantId: tenant.id },
+    orderBy: { updatedAt: "desc" },
+  });
+  if (demoProduct) {
+    const existingRec = await prisma.aiRecommendation.findFirst({
+      where: { tenantId: tenant.id, productId: demoProduct.id },
+    });
+    if (!existingRec) {
+      await prisma.aiRecommendation.create({
+        data: {
+          tenantId: tenant.id,
+          productId: demoProduct.id,
+          draftId: demoProduct.draftId,
+          sourceUrl: demoProduct.sourceUrl,
+          externalId: demoProduct.externalId,
+          title: demoProduct.titleKo ?? demoProduct.title,
+          score: 78,
+          scoreBreakdown: {
+            total: 78,
+            reasons: ["시드 샘플", "고마진", "재고 있음"],
+          },
+          status: "PENDING",
+          reasonCode: "STRONG_BUY",
+          reasonText:
+            "시드 샘플 추천입니다. 규칙 점수 78점으로 마진·재고 조건이 양호합니다.",
+          detailHtml:
+            "<section><h2>시드 추천 상세</h2><p>데모용 상세 HTML입니다.</p></section>",
+        },
+      });
+    }
+  }
+
+  console.log("Seed complete: demo tenant + owner + PriceRule (+ sample rec)");
   console.log(`  tenantId=${tenant.id}`);
 }
 

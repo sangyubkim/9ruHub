@@ -16,6 +16,7 @@
     "db:seed": "prisma db seed",
     "db:push": "prisma db push",
     "smoke:draft": "tsx scripts/smoke-draft.ts",
+    "recommend:generate": "tsx scripts/generate-recommendations.ts",
     "sync:scheduler": "tsx scripts/sync-scheduler.ts",
     "postinstall": "prisma generate"
   },

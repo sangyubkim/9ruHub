@@ -9,7 +9,7 @@ Amazon US 소싱 → 초안 → 채널 등록/동기화에 더해, **SaaS 멀티
 | Step | 기능 | 상태 |
 |------|------|------|
 | 0 | SaaS DB/ERD (tenants, products, orders, shipments, AI) | **완료** |
-| 1 | 규칙 추천 + GPT 이유/상세 + 원클릭 초안 | 진행 예정 |
+| 1 | 규칙 추천 + GPT 이유/상세 + 원클릭 초안 | **완료** |
 | 2 | 주문 관리 + 중국몰 자동주문 어댑터(스텁) | 진행 예정 |
 | 3 | 배대지 + 송장 자동등록 어댑터 | 진행 예정 |
 | 4 | AI 수익분석 대시보드 + 운영 비서 | 진행 예정 |
@@ -112,6 +112,20 @@ npm run sync:scheduler
 curl -X POST http://localhost:3000/api/cron/sync
 ```
 
+## Step 1 — 추천
+
+```bash
+npm run recommend:generate
+# 또는 UI: /recommendations
+# API:
+# POST /api/recommendations { "generate": true }
+# POST /api/recommendations { "url": "https://www.amazon.com/dp/..." }
+# POST /api/recommendations/:id/accept  → 초안 생성/연결
+# POST /api/recommendations/:id/ignore
+```
+
+점수는 `src/lib/recommend/score.ts` 규칙 엔진이 계산합니다. `OPENAI_API_KEY`가 있으면 이유/상세만 GPT, 없으면 템플릿 폴백.
+
 ## 주요 API (현재)
 
 - `POST /api/drafts` `{ "url": "https://www.amazon.com/dp/ASIN" }`
@@ -119,6 +133,8 @@ curl -X POST http://localhost:3000/api/cron/sync
 - `POST /api/drafts/:id/approve`
 - `POST /api/drafts/:id/publish`
 - `POST /api/drafts/:id/sync`
+- `GET|POST /api/recommendations`
+- `POST /api/recommendations/:id/accept|ignore`
 - `GET /api/channels/status`
 - `GET|POST /api/cron/sync`
 - `GET /api/templates/excel`
