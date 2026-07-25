@@ -1,6 +1,10 @@
-import { buildAnalyticsSnapshot } from "@/lib/analytics/metrics";
-import { listConversations } from "@/lib/analytics/assistant";
 import { OpsAssistantForm } from "@/app/analytics/OpsAssistantForm";
+import { PeriodToggle } from "@/app/analytics/PeriodToggle";
+import { listConversations } from "@/lib/analytics/assistant";
+import {
+  buildAnalyticsSnapshot,
+  parseAnalyticsPeriod,
+} from "@/lib/analytics/metrics";
 
 export const dynamic = "force-dynamic";
 
@@ -8,26 +12,54 @@ function pct(value: number) {
   return `${(value * 100).toFixed(1)}%`;
 }
 
-export default async function AnalyticsPage() {
+const PERIOD_LABEL: Record<string, string> = {
+  today: "오늘",
+  "7d": "최근 7일",
+  "30d": "최근 30일",
+  all: "전체 기간",
+};
+
+export default async function AnalyticsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ period?: string }>;
+}) {
+  const params = await searchParams;
+  const period = parseAnalyticsPeriod(params.period);
   const [snapshot, conversations] = await Promise.all([
-    buildAnalyticsSnapshot(),
+    buildAnalyticsSnapshot(undefined, period),
     listConversations(),
   ]);
   const r = snapshot.revenue;
   const rec = snapshot.recommendations;
+  const periodLabel = PERIOD_LABEL[period] ?? "오늘";
 
   const cards = [
-    { label: "주문 수", value: r.orderCount.toLocaleString("ko-KR") },
-    { label: "매출", value: `${r.subtotalKrw.toLocaleString("ko-KR")}원` },
-    { label: "이익", value: `${r.profitKrw.toLocaleString("ko-KR")}원` },
-    { label: "마진율", value: pct(r.marginRate) },
     {
-      label: "미완료 배송",
-      value: snapshot.logistics.openShipments.toLocaleString("ko-KR"),
+      label: `${periodLabel} 판매 건수`,
+      value: r.orderCount.toLocaleString("ko-KR"),
     },
     {
-      label: "추천 대기",
-      value: rec.pending.toLocaleString("ko-KR"),
+      label: "매출",
+      value: `${r.subtotalKrw.toLocaleString("ko-KR")}원`,
+    },
+    {
+      label: "순이익",
+      value: `${r.profitKrw.toLocaleString("ko-KR")}원`,
+    },
+    {
+      label: "광고비",
+      value: `${r.adSpendKrw.toLocaleString("ko-KR")}원`,
+    },
+    {
+      label: "ROI",
+      value: pct(r.roi),
+      hint: "순이익 ÷ 광고비",
+    },
+    {
+      label: "환불률",
+      value: pct(r.refundRate),
+      hint: `환불 ${r.refundedOrderCount}건 / ${r.orderCount}건`,
     },
   ];
 
@@ -38,11 +70,13 @@ export default async function AnalyticsPage() {
           AI 수익 분석
         </h2>
         <p className="mt-2 text-sm text-zinc-600">
-          주문·원가·추천·물류 피드백을 DB에서 집계합니다. 운영 비서는 이
-          스냅샷만 설명하며 숫자를 새로 만들지 않습니다.
+          주문·원가·광고비·환불을 DB에서 집계합니다. 운영 비서는 이 스냅샷만
+          설명하며 숫자를 새로 만들지 않습니다.
         </p>
-        <p className="mt-1 text-xs text-zinc-500">
-          스냅샷: {new Date(snapshot.generatedAt).toLocaleString("ko-KR")}
+        <PeriodToggle period={period} />
+        <p className="mt-2 text-xs text-zinc-500">
+          스냅샷: {new Date(snapshot.generatedAt).toLocaleString("ko-KR")} ·{" "}
+          {periodLabel}
         </p>
       </section>
 
@@ -54,6 +88,9 @@ export default async function AnalyticsPage() {
           >
             <p className="text-sm text-zinc-500">{card.label}</p>
             <p className="mt-2 text-2xl font-semibold">{card.value}</p>
+            {"hint" in card && card.hint ? (
+              <p className="mt-1 text-xs text-zinc-400">{card.hint}</p>
+            ) : null}
           </div>
         ))}
       </section>
@@ -84,26 +121,28 @@ export default async function AnalyticsPage() {
         </div>
 
         <div className="rounded-2xl border border-zinc-200 bg-white/80 p-5">
-          <h3 className="font-semibold">추천 성과</h3>
+          <h3 className="font-semibold">상세 / 추천 성과</h3>
           <ul className="mt-3 space-y-1 text-sm text-zinc-700">
-            <li>전체 {rec.total}건</li>
+            <li>마진율 {pct(r.marginRate)}</li>
             <li>
-              대기 {rec.pending} / 수락·초안 {rec.acceptedOrDrafted} / 무시{" "}
-              {rec.ignored}
+              원가 {r.costKrw.toLocaleString("ko-KR")}원 · 수수료{" "}
+              {r.platformFeeKrw.toLocaleString("ko-KR")}원 · 배송비{" "}
+              {r.shippingFeeKrw.toLocaleString("ko-KR")}원
             </li>
-            <li>평균 점수 {rec.avgScore.toFixed(1)}</li>
-            <li>전환율 {pct(rec.conversionRate)}</li>
+            <li>환불액 {r.refundedKrw.toLocaleString("ko-KR")}원</li>
+            <li>
+              추천 전체 {rec.total}건 · 대기 {rec.pending} · 수락·초안{" "}
+              {rec.acceptedOrDrafted} · 무시 {rec.ignored}
+            </li>
+            <li>
+              평균 점수 {rec.avgScore.toFixed(1)} · 전환율{" "}
+              {pct(rec.conversionRate)}
+            </li>
             <li>
               물류 미완료 {snapshot.logistics.openShipments} / 배송완료{" "}
               {snapshot.logistics.deliveredShipments}
             </li>
           </ul>
-          <div className="mt-4 text-sm text-zinc-600">
-            <p>원가 {r.costKrw.toLocaleString("ko-KR")}원</p>
-            <p>플랫폼 수수료 {r.platformFeeKrw.toLocaleString("ko-KR")}원</p>
-            <p>배송비 {r.shippingFeeKrw.toLocaleString("ko-KR")}원</p>
-            <p>환불 {r.refundedKrw.toLocaleString("ko-KR")}원</p>
-          </div>
         </div>
       </section>
 
@@ -112,7 +151,7 @@ export default async function AnalyticsPage() {
         <p className="mt-1 text-sm text-zinc-600">
           DB 집계 컨텍스트 기반 설명 (OPENAI_API_KEY 없으면 템플릿 요약)
         </p>
-        <OpsAssistantForm />
+        <OpsAssistantForm period={period} />
         {conversations[0] ? (
           <div className="mt-6 space-y-3 border-t border-zinc-100 pt-4">
             <p className="text-xs text-zinc-500">

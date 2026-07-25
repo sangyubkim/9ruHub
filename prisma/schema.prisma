@@ -31,6 +31,7 @@ enum SourceMall {
 enum Channel {
   SMARTSTORE
   COUPANG
+  ELEVENST
 }
 
 enum ListingStatus {
@@ -76,8 +77,14 @@ enum RecommendationStatus {
 }
 
 enum OrderStatus {
-  PENDING
-  PURCHASE_REQUESTED
+  PENDING // 유입(= RECEIVED)
+  SOURCING
+  CART_READY
+  AWAITING_PAYMENT_CONFIRM // 결제 확인 게이트 (명시 confirm 필요)
+  PAID
+  FORWARDER_ADDRESS_SET
+  PURCHASE_COMPLETE
+  PURCHASE_REQUESTED // legacy 스텁 purchase
   PURCHASED
   SHIPPED_TO_FORWARDER
   IN_FORWARDER
@@ -149,6 +156,8 @@ model Tenant {
   recommendations   AiRecommendation[]
   conversations     AiConversation[]
   productCandidates ProductCandidate[]
+  dailyOpsReports   DailyOpsReport[]
+  adSpends          AdSpend[]
 
   @@map("tenants")
 }
@@ -243,10 +252,13 @@ model ProductDraft {
   costBreakdown   Json
   images          Json
   options         Json
+  keywords        Json?
   noticeText      String
   categoryHint    String?
   isFallbackData  Boolean     @default(false)
   reviewNote      String?
+  /// AI 상세 생성 메타: usedGpt, sourceLang, translationNote, generatedAt
+  aiMeta          Json?
 
   approvedAt      DateTime?
   publishedAt     DateTime?
@@ -399,14 +411,30 @@ model Order {
   createdAt          DateTime    @default(now())
   updatedAt          DateTime    @updatedAt
 
-  tenant   Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenant   Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   items    OrderItem[]
   shipment Shipment?
+  events   OrderEvent[]
 
   @@unique([tenantId, channel, externalOrderId])
   @@index([tenantId, status])
   @@index([tenantId, orderedAt])
   @@map("orders")
+}
+
+/// 자동주문 파이프라인 / 어댑터 실행 이력
+model OrderEvent {
+  id        String   @id @default(cuid())
+  orderId   String
+  step      String
+  message   String
+  payload   Json?
+  createdAt DateTime @default(now())
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([orderId, createdAt])
+  @@map("order_events")
 }
 
 model OrderItem {
@@ -566,4 +594,40 @@ model AiConversationMessage {
 
   @@index([conversationId, createdAt])
   @@map("ai_conversation_messages")
+}
+
+/// 매일 아침 운영 비서 보고서 (인사이트는 코드, 문장은 GPT/템플릿)
+model DailyOpsReport {
+  id            String   @id @default(cuid())
+  tenantId      String
+  reportDate    DateTime @db.Date
+  insights      Json
+  narrative     String
+  usedGpt       Boolean  @default(false)
+  conversationId String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, reportDate])
+  @@index([tenantId, createdAt])
+  @@map("daily_ops_reports")
+}
+
+/// 일별 광고비 (ROI = 순이익 / 광고비)
+model AdSpend {
+  id        String   @id @default(cuid())
+  tenantId  String
+  date      DateTime @db.Date
+  amountKrw Int
+  channel   String?
+  note      String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, date])
+  @@map("ad_spends")
 }

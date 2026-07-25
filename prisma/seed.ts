@@ -325,8 +325,179 @@ async function main() {
     });
   }
 
+  // Morning report demo: price drop + low stock + day-over-day orders
+  const listed = await prisma.product.findFirst({
+    where: { tenantId: tenant.id },
+  });
+  if (listed) {
+    await prisma.product.update({
+      where: { id: listed.id },
+      data: {
+        status: "LISTED",
+        stockQty: 1,
+        inStock: true,
+        totalSold: 12,
+        totalProfitKrw: -3000,
+        refundCount: 2,
+        salePriceKrw: listed.salePriceKrw ?? 27900,
+      },
+    });
+    const histCount = await prisma.productPriceHistory.count({
+      where: { productId: listed.id },
+    });
+    if (histCount < 2) {
+      await prisma.productPriceHistory.createMany({
+        data: [
+          {
+            tenantId: tenant.id,
+            productId: listed.id,
+            sourcePrice: listed.sourcePrice,
+            salePriceKrw: (listed.salePriceKrw ?? 27900) + 2000,
+            currency: listed.currency,
+            inStock: true,
+            note: "seed_competitor_prev",
+            recordedAt: new Date(Date.now() - 86400000 * 2),
+          },
+          {
+            tenantId: tenant.id,
+            productId: listed.id,
+            sourcePrice: listed.sourcePrice,
+            salePriceKrw: listed.salePriceKrw ?? 27900,
+            currency: listed.currency,
+            inStock: true,
+            note: "seed_competitor_now",
+            recordedAt: new Date(Date.now() - 3600000),
+          },
+        ],
+      });
+    }
+  }
+
+  const now = new Date();
+  const yStart = new Date(
+    Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - 1),
+  );
+  const dStart = new Date(
+    Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - 2),
+  );
+  for (const [externalOrderId, orderedAt, subtotalKrw] of [
+    ["SEED-YDAY-1", yStart, 2600000],
+    ["SEED-YDAY-2", new Date(yStart.getTime() + 3600000), 1980000],
+    ["SEED-DBEF-1", dStart, 3881356],
+  ] as const) {
+    await prisma.order.upsert({
+      where: {
+        tenantId_channel_externalOrderId: {
+          tenantId: tenant.id,
+          channel: "SMARTSTORE",
+          externalOrderId,
+        },
+      },
+      create: {
+        tenantId: tenant.id,
+        channel: "SMARTSTORE",
+        externalOrderId,
+        status: "DELIVERED",
+        subtotalKrw,
+        costKrw: Math.round(subtotalKrw * 0.55),
+        platformFeeKrw: Math.round(subtotalKrw * 0.1),
+        profitKrw: Math.round(subtotalKrw * 0.18),
+        orderedAt,
+        items: {
+          create: [
+            {
+              title: listed?.titleKo ?? "시드 모닝리포트 상품",
+              productId: listed?.id,
+              quantity: 1,
+              unitSalePriceKrw: subtotalKrw,
+              unitCostKrw: Math.round(subtotalKrw * 0.55),
+              lineProfitKrw: Math.round(subtotalKrw * 0.18),
+            },
+          ],
+        },
+      },
+      update: {
+        subtotalKrw,
+        orderedAt,
+        status: "DELIVERED",
+      },
+    });
+  }
+
+  // Analytics demo KPI: ~58 today orders + ad spend + refund
+  const analyticsSeedMarker = await prisma.order.findFirst({
+    where: { tenantId: tenant.id, externalOrderId: "SEED-AN-001" },
+  });
+  if (!analyticsSeedMarker) {
+    const product = await prisma.product.findFirst({
+      where: { tenantId: tenant.id },
+    });
+    const title = product?.titleKo ?? product?.title ?? "시드 분석 상품";
+    const unitSale = 79_000;
+    const unitCost = 45_000;
+    const platformFee = 4_000;
+    const lineProfit = unitSale - unitCost - platformFee;
+
+    const seoulParts = new Intl.DateTimeFormat("en-CA", {
+      timeZone: "Asia/Seoul",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).formatToParts(new Date());
+    const y = seoulParts.find((p) => p.type === "year")!.value;
+    const m = seoulParts.find((p) => p.type === "month")!.value;
+    const d = seoulParts.find((p) => p.type === "day")!.value;
+    const dayStart = new Date(`${y}-${m}-${d}T00:00:00+09:00`);
+
+    const paidCount = 57;
+    const refundCount = 1;
+    for (let i = 1; i <= paidCount + refundCount; i++) {
+      const isRefund = i === paidCount + refundCount;
+      const orderedAt = new Date(dayStart.getTime() + i * 10 * 60_000);
+      await prisma.order.create({
+        data: {
+          tenantId: tenant.id,
+          channel: i % 2 === 0 ? "COUPANG" : "SMARTSTORE",
+          externalOrderId: `SEED-AN-${String(i).padStart(3, "0")}`,
+          status: isRefund ? "REFUNDED" : "DELIVERED",
+          customerName: `분석시드${i}`,
+          subtotalKrw: unitSale,
+          shippingFeeKrw: 0,
+          platformFeeKrw: platformFee,
+          costKrw: unitCost,
+          profitKrw: isRefund ? 0 : lineProfit,
+          refundedKrw: isRefund ? unitSale : 0,
+          orderedAt,
+          items: {
+            create: [
+              {
+                productId: product?.id,
+                title,
+                quantity: 1,
+                unitSalePriceKrw: unitSale,
+                unitCostKrw: unitCost,
+                lineProfitKrw: isRefund ? 0 : unitSale - unitCost,
+                purchaseStatus: "STUBBED",
+              },
+            ],
+          },
+        },
+      });
+    }
+
+    await prisma.adSpend.create({
+      data: {
+        tenantId: tenant.id,
+        date: dayStart,
+        amountKrw: 120_000,
+        channel: "NAVER",
+        note: "시드 오늘 광고비",
+      },
+    });
+  }
+
   console.log(
-    "Seed complete: demo tenant + owner + PriceRule (+ discover candidates/rec/order/shipment/conversation)",
+    "Seed complete: demo tenant + owner + PriceRule (+ discover/order/shipment/morning-report/analytics seeds)",
   );
   console.log(`  tenantId=${tenant.id}`);
 }
