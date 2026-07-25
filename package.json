@@ -16,6 +16,7 @@
     "db:seed": "prisma db seed",
     "db:push": "prisma db push",
     "db:apply:discover": "tsx scripts/apply-discover-migration.ts",
+    "db:apply:ai-detail": "tsx scripts/apply-ai-detail-migration.ts",
     "db:apply:auto-order": "tsx scripts/apply-auto-order-migration.ts",
     "db:apply:elevenst": "tsx scripts/apply-elevenst-migration.ts",
     "smoke:draft": "tsx scripts/smoke-draft.ts",

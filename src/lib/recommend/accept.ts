@@ -1,4 +1,5 @@
 import { RecommendationStatus } from "@/generated/prisma/client";
+import { regenerateAiDetailForDraft } from "@/lib/ai-detail/service";
 import { prisma } from "@/lib/db";
 import { createDraftFromCandidate } from "@/lib/draft/create-from-candidate";
 import { createDraftFromUrl } from "@/lib/draft/create-from-url";
@@ -6,6 +7,7 @@ import { getDefaultTenantId } from "@/lib/tenant";
 
 /**
  * 원클릭: 추천 수락 → 초안 확보(기존 draft 재사용 또는 URL/발굴후보로 생성) → DRAFT_CREATED
+ * 새로 만든 초안에는 AI 상세(제목/키워드/HTML/옵션)를 한 번 적용한다.
  */
 export async function acceptRecommendation(
   recommendationId: string,
@@ -26,6 +28,7 @@ export async function acceptRecommendation(
   }
 
   let draftId = rec.draftId ?? rec.product?.draftId ?? null;
+  let createdFresh = false;
 
   if (!draftId) {
     if (rec.candidateId) {
@@ -34,12 +37,25 @@ export async function acceptRecommendation(
         resolvedTenantId,
       );
       draftId = draft.id;
+      createdFresh = true;
     } else {
       const url = rec.sourceUrl ?? rec.product?.sourceUrl;
       if (!url) throw new Error("초안 생성에 필요한 sourceUrl이 없습니다.");
-      // Amazon-only fetcher — 발굴 후보가 아닌 기존 URL 흐름
-      const draft = await createDraftFromUrl(url, resolvedTenantId);
+      // Amazon URL 수락 시 AI 상세까지 생성
+      const draft = await createDraftFromUrl(url, resolvedTenantId, {
+        generateAi: true,
+      });
       draftId = draft.id;
+      createdFresh = true;
+    }
+  }
+
+  // 발굴 후보 초안은 생성 직후 AI 상세로 보강
+  if (createdFresh && rec.candidateId) {
+    try {
+      await regenerateAiDetailForDraft(draftId, resolvedTenantId);
+    } catch (error) {
+      console.warn("acceptRecommendation AI detail skipped", error);
     }
   }
 

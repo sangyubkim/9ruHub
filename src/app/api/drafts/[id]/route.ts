@@ -11,6 +11,7 @@ const updateSchema = z.object({
   detailHtml: z.string().min(1).optional(),
   noticeText: z.string().min(1).optional(),
   reviewNote: z.string().optional(),
+  keywords: z.array(z.string()).optional(),
   // ARCHIVED는 DELETE(soft-delete) 경로로만 설정
   status: z
     .nativeEnum(DraftStatus)
@@ -62,9 +63,13 @@ export async function PATCH(request: Request, { params }: Params) {
     }
 
     const body = updateSchema.parse(await request.json());
+    const { keywords, ...rest } = body;
     const draft = await prisma.productDraft.update({
       where: { id },
-      data: body,
+      data: {
+        ...rest,
+        ...(keywords !== undefined ? { keywords } : {}),
+      },
       include: { sourceProduct: true, listings: true },
     });
     return NextResponse.json({ draft });

@@ -79,6 +79,12 @@ export default async function HomePage() {
             AI 발굴
           </Link>
           <Link
+            href="/ai-detail"
+            className="rounded-full border border-zinc-300 bg-white px-5 py-2.5 text-sm hover:border-sky-500"
+          >
+            AI 상세 제작
+          </Link>
+          <Link
             href="/drafts/new"
             className="rounded-full border border-zinc-300 bg-white px-5 py-2.5 text-sm hover:border-sky-500"
           >

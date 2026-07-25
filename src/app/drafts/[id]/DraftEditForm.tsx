@@ -10,6 +10,7 @@ export function DraftEditForm({
   detailHtml,
   noticeText,
   reviewNote,
+  keywords = [],
 }: {
   id: string;
   titleKo: string;
@@ -17,6 +18,7 @@ export function DraftEditForm({
   detailHtml: string;
   noticeText: string;
   reviewNote: string | null;
+  keywords?: string[];
 }) {
   const router = useRouter();
   const [form, setForm] = useState({
@@ -25,6 +27,7 @@ export function DraftEditForm({
     detailHtml,
     noticeText,
     reviewNote: reviewNote ?? "",
+    keywordsText: keywords.join(", "),
   });
   const [message, setMessage] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -34,12 +37,20 @@ export function DraftEditForm({
     setLoading(true);
     setMessage(null);
     try {
+      const parsedKeywords = form.keywordsText
+        .split(/[,，]/)
+        .map((k) => k.trim())
+        .filter(Boolean);
       const res = await fetch(`/api/drafts/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          ...form,
+          titleKo: form.titleKo,
           salePriceKrw: Number(form.salePriceKrw),
+          detailHtml: form.detailHtml,
+          noticeText: form.noticeText,
+          reviewNote: form.reviewNote,
+          keywords: parsedKeywords,
         }),
       });
       const data = await res.json();
@@ -62,6 +73,16 @@ export function DraftEditForm({
           className="w-full rounded-xl border border-zinc-300 px-3 py-2"
           value={form.titleKo}
           onChange={(e) => setForm((s) => ({ ...s, titleKo: e.target.value }))}
+        />
+      </label>
+      <label className="block text-sm">
+        <span className="mb-1 block">키워드 (쉼표 구분)</span>
+        <input
+          className="w-full rounded-xl border border-zinc-300 px-3 py-2"
+          value={form.keywordsText}
+          onChange={(e) =>
+            setForm((s) => ({ ...s, keywordsText: e.target.value }))
+          }
         />
       </label>
       <label className="block text-sm">

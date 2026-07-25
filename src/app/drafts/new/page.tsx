@@ -6,6 +6,7 @@ import { useState } from "react";
 export default function NewDraftPage() {
   const router = useRouter();
   const [url, setUrl] = useState("");
+  const [generateAi, setGenerateAi] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -17,7 +18,7 @@ export default function NewDraftPage() {
       const res = await fetch("/api/drafts", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url }),
+        body: JSON.stringify({ url, generateAi }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "생성 실패");
@@ -36,6 +37,11 @@ export default function NewDraftPage() {
         <h2 className="font-[family-name:var(--font-display)] text-3xl">URL로 초안 생성</h2>
         <p className="mt-1 text-sm text-zinc-600">
           Amazon US 상품 URL 또는 ASIN을 입력하면 스마트스토어/쿠팡용 초안을 만듭니다.
+          미리보기 후 저장하려면{" "}
+          <a href="/ai-detail" className="text-sky-800 underline">
+            AI 상세 제작
+          </a>
+          을 이용하세요.
         </p>
       </div>
 
@@ -52,6 +58,15 @@ export default function NewDraftPage() {
             className="w-full rounded-xl border border-zinc-300 px-3 py-2.5 outline-none ring-sky-500 focus:ring-2"
             required
           />
+        </label>
+
+        <label className="flex items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            checked={generateAi}
+            onChange={(e) => setGenerateAi(e.target.checked)}
+          />
+          <span>AI 상세 함께 생성 (제목·키워드·상세 HTML·옵션)</span>
         </label>
 
         {error ? <p className="text-sm text-rose-600">{error}</p> : null}

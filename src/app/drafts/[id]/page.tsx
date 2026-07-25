@@ -4,6 +4,7 @@ import { DraftStatus } from "@/generated/prisma/client";
 import { StatusBadge } from "@/components/StatusBadge";
 import { prisma } from "@/lib/db";
 import { getDefaultTenantId } from "@/lib/tenant";
+import { AiDetailActions } from "./AiDetailActions";
 import { DraftActions } from "./DraftActions";
 import { DraftEditForm } from "./DraftEditForm";
 import { DraftPricingPanel } from "./DraftPricingPanel";
@@ -33,6 +34,13 @@ export default async function DraftDetailPage({ params }: Props) {
 
   const images = Array.isArray(draft.images) ? (draft.images as string[]) : [];
   const breakdown = draft.costBreakdown as Record<string, unknown>;
+  const keywords = Array.isArray(draft.keywords)
+    ? (draft.keywords as string[])
+    : [];
+  const aiMeta =
+    draft.aiMeta && typeof draft.aiMeta === "object"
+      ? (draft.aiMeta as Record<string, unknown>)
+      : null;
   const sourcePriceKrw =
     typeof breakdown.sourcePriceKrw === "number"
       ? breakdown.sourcePriceKrw
@@ -68,6 +76,7 @@ export default async function DraftDetailPage({ params }: Props) {
       </div>
 
       <DraftActions id={draft.id} status={draft.status} />
+      <AiDetailActions id={draft.id} />
 
       <div className="grid gap-6 lg:grid-cols-2">
         <section className="space-y-4 rounded-2xl border border-zinc-200 bg-white/90 p-5">
@@ -112,12 +121,14 @@ export default async function DraftDetailPage({ params }: Props) {
         </section>
 
         <DraftEditForm
+          key={`${draft.id}-${draft.updatedAt.toISOString()}`}
           id={draft.id}
           titleKo={draft.titleKo}
           salePriceKrw={draft.salePriceKrw}
           detailHtml={draft.detailHtml}
           noticeText={draft.noticeText}
           reviewNote={draft.reviewNote}
+          keywords={keywords}
         />
       </div>
 
@@ -128,6 +139,33 @@ export default async function DraftDetailPage({ params }: Props) {
         sourcePrice={Number(draft.sourceProduct.sourcePrice)}
         currency={draft.sourceProduct.currency}
       />
+
+      {(keywords.length > 0 || aiMeta) && (
+        <section className="rounded-2xl border border-zinc-200 bg-white/90 p-5">
+          <h3 className="font-semibold">AI 메타 / 키워드</h3>
+          {aiMeta ? (
+            <p className="mt-2 text-sm text-zinc-600">
+              {aiMeta.usedGpt ? "GPT" : "템플릿"} · 원문{" "}
+              {String(aiMeta.sourceLang ?? "-")}
+              {typeof aiMeta.translationNote === "string"
+                ? ` — ${aiMeta.translationNote}`
+                : ""}
+            </p>
+          ) : null}
+          {keywords.length > 0 ? (
+            <div className="mt-3 flex flex-wrap gap-2">
+              {keywords.map((kw) => (
+                <span
+                  key={kw}
+                  className="rounded-full border border-zinc-200 bg-zinc-50 px-3 py-1 text-xs"
+                >
+                  {kw}
+                </span>
+              ))}
+            </div>
+          ) : null}
+        </section>
+      )}
 
       <section className="rounded-2xl border border-zinc-200 bg-white/90 p-5">
         <h3 className="font-semibold">채널 리스팅</h3>

@@ -75,7 +75,8 @@ npm run db:dev
 ```bash
 npm run db:migrate
 # Prisma local에서 db push/migrate가 portal 오류면:
-# npx tsx scripts/apply-discover-migration.ts
+# npm run db:apply:discover
+# npm run db:apply:ai-detail
 npm run db:seed
 ```
 

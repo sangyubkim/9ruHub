@@ -7,14 +7,11 @@ import {
 } from "@/generated/prisma/client";
 import { generateAiDetail } from "@/lib/ai-detail/generate";
 import { optionsToJson } from "@/lib/ai-detail/prompts";
+import type { AiDetailContent, AiDetailInput, AiDetailPreview } from "@/lib/ai-detail/types";
 import { fetchAmazonUsProduct } from "@/lib/amazon/fetch-product";
-import { isAmazonUsUrl, extractAsin } from "@/lib/amazon/parse-url";
+import { extractAsin, isAmazonUsUrl } from "@/lib/amazon/parse-url";
 import { prisma } from "@/lib/db";
-import {
-  DEFAULT_NOTICE,
-  localizeTitle,
-  renderDetailHtml,
-} from "@/lib/draft/detail-template";
+import { DEFAULT_NOTICE } from "@/lib/draft/detail-template";
 import {
   calculateSalePrice,
   defaultPriceRuleFromEnv,
@@ -25,11 +22,6 @@ import {
   getTenantPriceRule,
   upsertProductFromDraft,
 } from "@/lib/tenant";
-
-export type CreateDraftFromUrlOptions = {
-  /** true면 GPT/템플릿으로 제목·키워드·상세·옵션 생성 */
-  generateAi?: boolean;
-};
 
 function toJson(value: unknown): Prisma.InputJsonValue {
   return JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue;
@@ -55,11 +47,7 @@ async function getPriceRule(tenantId: string): Promise<PriceRuleInput> {
   };
 }
 
-export async function createDraftFromUrl(
-  url: string,
-  tenantId?: string,
-  options: CreateDraftFromUrlOptions = {},
-) {
+function assertAmazonUrl(url: string) {
   if (!extractAsin(url)) {
     throw new Error("유효한 Amazon US URL 또는 ASIN이 필요합니다.");
   }
@@ -68,45 +56,76 @@ export async function createDraftFromUrl(
       throw new Error("1차 버전은 Amazon US URL만 지원합니다.");
     }
   }
+}
 
-  const resolvedTenantId = tenantId ?? (await getDefaultTenantId());
+function buildAiMeta(content: AiDetailContent) {
+  return {
+    usedGpt: content.usedGpt,
+    sourceLang: content.sourceLang,
+    translationNote: content.translationNote,
+    generatedAt: new Date().toISOString(),
+  };
+}
+
+async function fetchAndPrice(url: string, tenantId: string) {
+  assertAmazonUrl(url);
   const product = await fetchAmazonUsProduct(url);
-  const rule = await getPriceRule(resolvedTenantId);
+  const rule = await getPriceRule(tenantId);
   const breakdown = calculateSalePrice(product.sourcePrice, rule);
+  const input: AiDetailInput = {
+    title: product.title,
+    brand: product.brand,
+    sourceUrl: product.sourceUrl,
+    asin: product.asin,
+    sourcePriceUsd: product.sourcePrice,
+    salePriceKrw: breakdown.salePriceKrw,
+    inStock: product.inStock,
+    images: product.images,
+    options: product.options,
+    categoryHint: "해외구매대행",
+    sourceLang: "en",
+  };
+  return { product, breakdown, input };
+}
 
-  let titleKo = localizeTitle(product.title, product.brand);
-  let detailHtml = renderDetailHtml(product, breakdown, DEFAULT_NOTICE);
-  let draftOptions: unknown = product.options;
-  let keywords: string[] | undefined;
-  let noticeText = DEFAULT_NOTICE;
-  let aiMeta: Record<string, unknown> | undefined;
-
-  if (options.generateAi) {
-    const ai = await generateAiDetail({
+/** URL → AI 상세 미리보기 (DB 초안 미저장) */
+export async function previewAiDetailFromUrl(
+  url: string,
+  tenantId?: string,
+): Promise<AiDetailPreview> {
+  const resolvedTenantId = tenantId ?? (await getDefaultTenantId());
+  const { product, breakdown, input } = await fetchAndPrice(
+    url,
+    resolvedTenantId,
+  );
+  const content = await generateAiDetail(input);
+  return {
+    ...content,
+    product: {
+      asin: product.asin,
+      sourceUrl: product.sourceUrl,
       title: product.title,
       brand: product.brand,
-      sourceUrl: product.sourceUrl,
-      asin: product.asin,
       sourcePriceUsd: product.sourcePrice,
       salePriceKrw: breakdown.salePriceKrw,
       inStock: product.inStock,
       images: product.images,
-      options: product.options,
-      categoryHint: "해외구매대행",
-      sourceLang: "en",
-    });
-    titleKo = ai.titleKo;
-    detailHtml = ai.detailHtml;
-    draftOptions = optionsToJson(ai.options);
-    keywords = ai.keywords;
-    noticeText = ai.noticeText || DEFAULT_NOTICE;
-    aiMeta = {
-      usedGpt: ai.usedGpt,
-      sourceLang: ai.sourceLang,
-      translationNote: ai.translationNote,
-      generatedAt: new Date().toISOString(),
-    };
-  }
+      isFallbackData: product.isFallback,
+    },
+  };
+}
+
+/** URL → AI 상세 생성 후 ProductDraft 저장 */
+export async function createDraftWithAiDetail(
+  url: string,
+  tenantId?: string,
+) {
+  const resolvedTenantId = tenantId ?? (await getDefaultTenantId());
+  const { product, breakdown, input } = await fetchAndPrice(
+    url,
+    resolvedTenantId,
+  );
+  const content = await generateAiDetail(input);
 
   const sourceProduct = await prisma.sourceProduct.upsert({
     where: {
@@ -149,17 +168,17 @@ export async function createDraftFromUrl(
       tenantId: resolvedTenantId,
       status: DraftStatus.DRAFT,
       sourceProductId: sourceProduct.id,
-      titleKo,
-      detailHtml,
+      titleKo: content.titleKo,
+      detailHtml: content.detailHtml,
       salePriceKrw: breakdown.salePriceKrw,
       costBreakdown: toJson(breakdown),
       images: toJson(product.images),
-      options: toJson(draftOptions),
-      keywords: keywords ? toJson(keywords) : undefined,
-      noticeText,
+      options: toJson(optionsToJson(content.options)),
+      keywords: toJson(content.keywords),
+      noticeText: content.noticeText || DEFAULT_NOTICE,
       categoryHint: "해외구매대행",
       isFallbackData: product.isFallback,
-      aiMeta: aiMeta ? toJson(aiMeta) : undefined,
+      aiMeta: toJson(buildAiMeta(content)),
       listings: {
         create: [
           { channel: Channel.SMARTSTORE, status: ListingStatus.NOT_CREATED },
@@ -178,7 +197,7 @@ export async function createDraftFromUrl(
     sourceProductId: sourceProduct.id,
     draftId: draft.id,
     title: product.title,
-    titleKo,
+    titleKo: content.titleKo,
     brand: product.brand,
     sourceMall: SourceMall.AMAZON_US,
     sourceUrl: product.sourceUrl,
@@ -196,5 +215,63 @@ export async function createDraftFromUrl(
     images: toJson(product.images),
   });
 
-  return draft;
+  return { draft, content };
+}
+
+/** 기존 초안에 AI 상세 재생성·저장 */
+export async function regenerateAiDetailForDraft(
+  draftId: string,
+  tenantId?: string,
+) {
+  const resolvedTenantId = tenantId ?? (await getDefaultTenantId());
+  const draft = await prisma.productDraft.findFirst({
+    where: {
+      id: draftId,
+      tenantId: resolvedTenantId,
+      status: { not: DraftStatus.ARCHIVED },
+    },
+    include: { sourceProduct: true },
+  });
+  if (!draft) throw new Error("초안을 찾을 수 없습니다.");
+
+  const source = draft.sourceProduct;
+  const images = Array.isArray(draft.images) ? (draft.images as string[]) : [];
+  const rawOptions = Array.isArray(draft.options)
+    ? (draft.options as Array<{ name: string; values: string[] }>)
+    : Array.isArray(source.options)
+      ? (source.options as Array<{ name: string; values: string[] }>)
+      : [];
+
+  const input: AiDetailInput = {
+    title: source.title,
+    brand: source.brand,
+    sourceUrl: source.sourceUrl,
+    asin: source.externalId,
+    sourcePriceUsd: Number(source.sourcePrice),
+    salePriceKrw: draft.salePriceKrw,
+    inStock: source.inStock,
+    images,
+    options: rawOptions.map((o) => ({
+      name: o.name,
+      values: Array.isArray(o.values) ? o.values.map(String) : [],
+    })),
+    categoryHint: draft.categoryHint ?? "해외구매대행",
+    sourceLang: source.currency === "CNY" ? "zh" : "en",
+  };
+
+  const content = await generateAiDetail(input);
+  const updated = await prisma.productDraft.update({
+    where: { id: draft.id },
+    data: {
+      titleKo: content.titleKo,
+      detailHtml: content.detailHtml,
+      options: toJson(optionsToJson(content.options)),
+      keywords: toJson(content.keywords),
+      noticeText: content.noticeText || draft.noticeText,
+      aiMeta: toJson(buildAiMeta(content)),
+    },
+    include: { sourceProduct: true, listings: true },
+  });
+
+  return { draft: updated, content };
 }
