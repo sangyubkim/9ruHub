@@ -54,6 +54,7 @@ export async function getOrder(orderId: string, tenantId?: string) {
     include: {
       items: { include: { product: true } },
       shipment: true,
+      events: { orderBy: { createdAt: "asc" } },
     },
   });
 }
@@ -131,7 +132,10 @@ export async function updateOrderStatus(
     data: {
       status,
       purchasedAt:
-        status === OrderStatus.PURCHASED || status === OrderStatus.PURCHASE_REQUESTED
+        status === OrderStatus.PURCHASED ||
+        status === OrderStatus.PURCHASE_REQUESTED ||
+        status === OrderStatus.PAID ||
+        status === OrderStatus.PURCHASE_COMPLETE
           ? order.purchasedAt ?? new Date()
           : order.purchasedAt,
       cancelledAt:
@@ -139,7 +143,11 @@ export async function updateOrderStatus(
           ? new Date()
           : order.cancelledAt,
     },
-    include: { items: true, shipment: true },
+    include: {
+      items: true,
+      shipment: true,
+      events: { orderBy: { createdAt: "asc" } },
+    },
   });
 }
 

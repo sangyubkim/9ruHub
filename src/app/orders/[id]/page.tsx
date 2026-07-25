@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getOrder } from "@/lib/orders/service";
+import { pipelineChecklist } from "@/lib/orders/auto-order";
 import { OrderActions } from "@/app/orders/[id]/OrderActions";
 
 export const dynamic = "force-dynamic";
@@ -11,6 +12,8 @@ export default async function OrderDetailPage({ params }: Props) {
   const { id } = await params;
   const order = await getOrder(id);
   if (!order) notFound();
+
+  const checklist = pipelineChecklist(order.status);
 
   return (
     <div className="space-y-6">
@@ -27,7 +30,12 @@ export default async function OrderDetailPage({ params }: Props) {
         </p>
       </section>
 
-      <OrderActions orderId={order.id} status={order.status} />
+      <OrderActions
+        orderId={order.id}
+        status={order.status}
+        checklist={checklist}
+        events={order.events}
+      />
 
       <section className="rounded-2xl border border-zinc-200 bg-white/80 p-5">
         <h3 className="font-semibold">라인 아이템</h3>
