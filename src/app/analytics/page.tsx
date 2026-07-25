@@ -21,6 +21,14 @@ export default async function AnalyticsPage() {
     { label: "매출", value: `${r.subtotalKrw.toLocaleString("ko-KR")}원` },
     { label: "이익", value: `${r.profitKrw.toLocaleString("ko-KR")}원` },
     { label: "마진율", value: pct(r.marginRate) },
+    {
+      label: "미완료 배송",
+      value: snapshot.logistics.openShipments.toLocaleString("ko-KR"),
+    },
+    {
+      label: "추천 대기",
+      value: rec.pending.toLocaleString("ko-KR"),
+    },
   ];
 
   return (
@@ -30,15 +38,15 @@ export default async function AnalyticsPage() {
           AI 수익 분석
         </h2>
         <p className="mt-2 text-sm text-zinc-600">
-          주문·원가·추천 피드백를 DB에서 집계합니다. 운영 비서는 이 스냅샷만
-          설명하며 숫자를 새로 만들지 않습니다.
+          주문·원가·추천·물류 피드백을 DB에서 집계합니다. 운영 비서는 이
+          스냅샷만 설명하며 숫자를 새로 만들지 않습니다.
         </p>
         <p className="mt-1 text-xs text-zinc-500">
           스냅샷: {new Date(snapshot.generatedAt).toLocaleString("ko-KR")}
         </p>
       </section>
 
-      <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {cards.map((card) => (
           <div
             key={card.label}
@@ -79,9 +87,16 @@ export default async function AnalyticsPage() {
           <h3 className="font-semibold">추천 성과</h3>
           <ul className="mt-3 space-y-1 text-sm text-zinc-700">
             <li>전체 {rec.total}건</li>
-            <li>대기 {rec.pending} / 수락·초안 {rec.acceptedOrDrafted} / 무시 {rec.ignored}</li>
+            <li>
+              대기 {rec.pending} / 수락·초안 {rec.acceptedOrDrafted} / 무시{" "}
+              {rec.ignored}
+            </li>
             <li>평균 점수 {rec.avgScore.toFixed(1)}</li>
             <li>전환율 {pct(rec.conversionRate)}</li>
+            <li>
+              물류 미완료 {snapshot.logistics.openShipments} / 배송완료{" "}
+              {snapshot.logistics.deliveredShipments}
+            </li>
           </ul>
           <div className="mt-4 text-sm text-zinc-600">
             <p>원가 {r.costKrw.toLocaleString("ko-KR")}원</p>

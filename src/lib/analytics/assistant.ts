@@ -28,6 +28,7 @@ function templateExplain(snapshot: AnalyticsSnapshot, question: string): string 
       ? `- 매출 1위: ${top.title} (${top.revenueKrw.toLocaleString("ko-KR")}원 / ${top.quantity}개)`
       : "- 매출 1위 상품 데이터 없음",
     `- 추천 ${rec.total}건(대기 ${rec.pending}, 수락/초안 ${rec.acceptedOrDrafted}, 무시 ${rec.ignored}), 평균점수 ${rec.avgScore.toFixed(1)}, 전환율 ${(rec.conversionRate * 100).toFixed(1)}%`,
+    `- 물류: 미완료 ${snapshot.logistics.openShipments}건, 배송완료 ${snapshot.logistics.deliveredShipments}건`,
   ].join("\n");
 }
 

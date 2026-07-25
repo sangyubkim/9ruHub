@@ -25,8 +25,13 @@ describe("analytics snapshot shape", () => {
         avgScore: 0,
         conversionRate: 0,
       },
+      logistics: {
+        openShipments: 0,
+        deliveredShipments: 0,
+      },
     };
     expect(sample.revenue.orderCount).toBe(0);
     expect(sample.recommendations.conversionRate).toBe(0);
+    expect(sample.logistics.openShipments).toBe(0);
   });
 });

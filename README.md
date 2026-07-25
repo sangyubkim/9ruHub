@@ -187,6 +187,8 @@ npm run recommend:generate
 ```bash
 npm test
 npm run smoke:draft
+npm run smoke:shipment
+npm run smoke:analytics
 ```
 
 ## Stage 5 (남은 일)

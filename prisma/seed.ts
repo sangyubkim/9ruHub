@@ -155,8 +155,42 @@ async function main() {
     });
   }
 
+  // Step 4 sample ops conversation with metrics snapshot
+  const existingConv = await prisma.aiConversation.findFirst({
+    where: { tenantId: tenant.id, title: "시드 운영 브리핑" },
+  });
+  if (!existingConv) {
+    const conv = await prisma.aiConversation.create({
+      data: {
+        tenantId: tenant.id,
+        title: "시드 운영 브리핑",
+        context: {
+          note: "seed",
+          capturedAt: new Date().toISOString(),
+        },
+      },
+    });
+    await prisma.aiConversationMessage.createMany({
+      data: [
+        {
+          conversationId: conv.id,
+          role: "USER",
+          content: "수익과 마진 요약해줘",
+          metricsSnapshot: { seed: true },
+        },
+        {
+          conversationId: conv.id,
+          role: "ASSISTANT",
+          content:
+            "시드 대화입니다. 대시보드와 /analytics에서 실시간 DB 집계 수치를 확인하세요.",
+          metricsSnapshot: { seed: true, usedGpt: false },
+        },
+      ],
+    });
+  }
+
   console.log(
-    "Seed complete: demo tenant + owner + PriceRule (+ sample rec/order/shipment)",
+    "Seed complete: demo tenant + owner + PriceRule (+ sample rec/order/shipment/conversation)",
   );
   console.log(`  tenantId=${tenant.id}`);
 }

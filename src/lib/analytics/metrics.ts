@@ -29,6 +29,10 @@ export type AnalyticsSnapshot = {
     avgScore: number;
     conversionRate: number;
   };
+  logistics: {
+    openShipments: number;
+    deliveredShipments: number;
+  };
 };
 
 /**
@@ -87,10 +91,21 @@ export async function buildAnalyticsSnapshot(
     .sort((a, b) => b.revenueKrw - a.revenueKrw)
     .slice(0, 10);
 
-  const recommendations = await prisma.aiRecommendation.findMany({
-    where: { tenantId: resolvedTenantId },
-    select: { status: true, score: true },
-  });
+  const [recommendations, openShipments, deliveredShipments] = await Promise.all([
+    prisma.aiRecommendation.findMany({
+      where: { tenantId: resolvedTenantId },
+      select: { status: true, score: true },
+    }),
+    prisma.shipment.count({
+      where: {
+        tenantId: resolvedTenantId,
+        status: { in: ["PENDING", "AT_FORWARDER", "IN_TRANSIT", "EXCEPTION"] },
+      },
+    }),
+    prisma.shipment.count({
+      where: { tenantId: resolvedTenantId, status: "DELIVERED" },
+    }),
+  ]);
   const total = recommendations.length;
   const pending = recommendations.filter((r) => r.status === "PENDING").length;
   const acceptedOrDrafted = recommendations.filter((r) =>
@@ -125,6 +140,10 @@ export async function buildAnalyticsSnapshot(
       ignored,
       avgScore,
       conversionRate,
+    },
+    logistics: {
+      openShipments,
+      deliveredShipments,
     },
   };
 }
