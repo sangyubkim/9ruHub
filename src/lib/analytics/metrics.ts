@@ -1,19 +1,30 @@
+import {
+  aggregateRevenueMetrics,
+  parseAnalyticsPeriod,
+  resolvePeriodRange,
+  type AnalyticsPeriod,
+  type RevenueMetrics,
+} from "@/lib/analytics/kpi";
 import { prisma } from "@/lib/db";
 import { getDefaultTenantId } from "@/lib/tenant";
+
+export type { AnalyticsPeriod } from "@/lib/analytics/kpi";
+export {
+  aggregateRevenueMetrics,
+  computeRefundRate,
+  computeRoi,
+  isRefundedOrder,
+  parseAnalyticsPeriod,
+  resolvePeriodRange,
+} from "@/lib/analytics/kpi";
 
 export type AnalyticsSnapshot = {
   tenantId: string;
   generatedAt: string;
-  revenue: {
-    orderCount: number;
-    subtotalKrw: number;
-    costKrw: number;
-    platformFeeKrw: number;
-    shippingFeeKrw: number;
-    profitKrw: number;
-    marginRate: number;
-    refundedKrw: number;
-  };
+  period: AnalyticsPeriod;
+  periodStart: string | null;
+  periodEnd: string;
+  revenue: RevenueMetrics;
   topProducts: Array<{
     productId: string | null;
     title: string;
@@ -40,24 +51,40 @@ export type AnalyticsSnapshot = {
  */
 export async function buildAnalyticsSnapshot(
   tenantId?: string,
+  period: AnalyticsPeriod = "today",
 ): Promise<AnalyticsSnapshot> {
   const resolvedTenantId = tenantId ?? (await getDefaultTenantId());
+  const resolvedPeriod = parseAnalyticsPeriod(period);
+  const { start, end } = resolvePeriodRange(resolvedPeriod);
+
+  const orderWhere = {
+    tenantId: resolvedTenantId,
+    status: { notIn: ["CANCELLED" as const] },
+    ...(start
+      ? { orderedAt: { gte: start, lt: end } }
+      : { orderedAt: { lt: end } }),
+  };
 
   const orders = await prisma.order.findMany({
-    where: {
-      tenantId: resolvedTenantId,
-      status: { notIn: ["CANCELLED"] },
-    },
+    where: orderWhere,
     include: { items: true },
   });
 
-  const subtotalKrw = orders.reduce((s, o) => s + o.subtotalKrw, 0);
-  const costKrw = orders.reduce((s, o) => s + o.costKrw, 0);
-  const platformFeeKrw = orders.reduce((s, o) => s + o.platformFeeKrw, 0);
-  const shippingFeeKrw = orders.reduce((s, o) => s + o.shippingFeeKrw, 0);
-  const profitKrw = orders.reduce((s, o) => s + o.profitKrw, 0);
-  const refundedKrw = orders.reduce((s, o) => s + o.refundedKrw, 0);
-  const marginRate = subtotalKrw > 0 ? profitKrw / subtotalKrw : 0;
+  // DATE 컬럼: end(다음날 자정)는 배타 → lte 전날(= start..오늘)
+  const adSpendEndInclusive = new Date(end.getTime() - 86_400_000);
+  const adSpendWhere = {
+    tenantId: resolvedTenantId,
+    ...(start
+      ? { date: { gte: start, lte: adSpendEndInclusive } }
+      : { date: { lte: adSpendEndInclusive } }),
+  };
+  const adSpendAgg = await prisma.adSpend.aggregate({
+    where: adSpendWhere,
+    _sum: { amountKrw: true },
+  });
+  const adSpendKrw = adSpendAgg._sum.amountKrw ?? 0;
+
+  const revenue = aggregateRevenueMetrics(orders, adSpendKrw);
 
   const productMap = new Map<
     string,
@@ -122,16 +149,10 @@ export async function buildAnalyticsSnapshot(
   return {
     tenantId: resolvedTenantId,
     generatedAt: new Date().toISOString(),
-    revenue: {
-      orderCount: orders.length,
-      subtotalKrw,
-      costKrw,
-      platformFeeKrw,
-      shippingFeeKrw,
-      profitKrw,
-      marginRate,
-      refundedKrw,
-    },
+    period: resolvedPeriod,
+    periodStart: start?.toISOString() ?? null,
+    periodEnd: end.toISOString(),
+    revenue,
     topProducts,
     recommendations: {
       total,

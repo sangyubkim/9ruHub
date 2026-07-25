@@ -485,15 +485,39 @@ async function main() {
       });
     }
 
-    await prisma.adSpend.create({
-      data: {
+  }
+
+  // Ad spend upsert independent of order marker (idempotent demo KPI)
+  {
+    const seoulParts = new Intl.DateTimeFormat("en-CA", {
+      timeZone: "Asia/Seoul",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).formatToParts(new Date());
+    const y = seoulParts.find((p) => p.type === "year")!.value;
+    const m = seoulParts.find((p) => p.type === "month")!.value;
+    const d = seoulParts.find((p) => p.type === "day")!.value;
+    const dayStart = new Date(`${y}-${m}-${d}T00:00:00+09:00`);
+    const existingAd = await prisma.adSpend.findFirst({
+      where: {
         tenantId: tenant.id,
         date: dayStart,
-        amountKrw: 120_000,
         channel: "NAVER",
         note: "시드 오늘 광고비",
       },
     });
+    if (!existingAd) {
+      await prisma.adSpend.create({
+        data: {
+          tenantId: tenant.id,
+          date: dayStart,
+          amountKrw: 120_000,
+          channel: "NAVER",
+          note: "시드 오늘 광고비",
+        },
+      });
+    }
   }
 
   console.log(

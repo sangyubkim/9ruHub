@@ -1,6 +1,8 @@
 import { ConversationRole, Prisma } from "@/generated/prisma/client";
 import {
   buildAnalyticsSnapshot,
+  parseAnalyticsPeriod,
+  type AnalyticsPeriod,
   type AnalyticsSnapshot,
 } from "@/lib/analytics/metrics";
 import { prisma } from "@/lib/db";
@@ -12,8 +14,9 @@ function toJson(value: unknown): Prisma.InputJsonValue {
 
 const SYSTEM_PROMPT = `당신은 구매대행 운영 비서입니다.
 아래 metrics JSON에 있는 숫자만 사용해 한국어로 설명하세요.
-JSON에 없는 매출/이익/건수를 추측하거나 만들지 마세요.
-없으면 "데이터 없음"이라고 말하세요.`;
+JSON에 없는 매출/이익/건수/광고비/ROI/환불률을 추측하거나 만들지 마세요.
+없으면 "데이터 없음"이라고 말하세요.
+공식: ROI = 순이익/광고비(비율, %로 말할 때 ×100), 환불률 = 환불주문수/판매건수.`;
 
 function templateExplain(snapshot: AnalyticsSnapshot, question: string): string {
   const r = snapshot.revenue;
@@ -21,9 +24,10 @@ function templateExplain(snapshot: AnalyticsSnapshot, question: string): string 
   const top = snapshot.topProducts[0];
   return [
     `질문: ${question}`,
-    `DB 스냅샷(${snapshot.generatedAt}) 기준:`,
-    `- 주문 ${r.orderCount}건, 매출 ${r.subtotalKrw.toLocaleString("ko-KR")}원, 이익 ${r.profitKrw.toLocaleString("ko-KR")}원, 마진율 ${(r.marginRate * 100).toFixed(1)}%`,
-    `- 환불액 ${r.refundedKrw.toLocaleString("ko-KR")}원`,
+    `DB 스냅샷(${snapshot.generatedAt}, period=${snapshot.period}) 기준:`,
+    `- 판매 ${r.orderCount}건, 매출 ${r.subtotalKrw.toLocaleString("ko-KR")}원, 순이익 ${r.profitKrw.toLocaleString("ko-KR")}원, 마진율 ${(r.marginRate * 100).toFixed(1)}%`,
+    `- 광고비 ${r.adSpendKrw.toLocaleString("ko-KR")}원, ROI ${(r.roi * 100).toFixed(1)}% (순이익÷광고비)`,
+    `- 환불률 ${(r.refundRate * 100).toFixed(1)}% (${r.refundedOrderCount}/${r.orderCount}건), 환불액 ${r.refundedKrw.toLocaleString("ko-KR")}원`,
     top
       ? `- 매출 1위: ${top.title} (${top.revenueKrw.toLocaleString("ko-KR")}원 / ${top.quantity}개)`
       : "- 매출 1위 상품 데이터 없음",
@@ -72,9 +76,11 @@ export async function askOpsAssistant(options: {
   question: string;
   tenantId?: string;
   conversationId?: string;
+  period?: AnalyticsPeriod | string;
 }) {
   const tenantId = options.tenantId ?? (await getDefaultTenantId());
-  const snapshot = await buildAnalyticsSnapshot(tenantId);
+  const period = parseAnalyticsPeriod(options.period);
+  const snapshot = await buildAnalyticsSnapshot(tenantId, period);
 
   let conversationId = options.conversationId;
   if (!conversationId) {

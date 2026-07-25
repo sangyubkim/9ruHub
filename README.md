@@ -259,13 +259,27 @@ npm run smoke:forwarder-invoice
 ## Step 4 — 수익분석 / 운영 비서
 
 ```bash
-# UI: /analytics
-# GET  /api/analytics
-# POST /api/analytics/assistant { "question": "마진 요약해줘" }
+# UI: /analytics?period=today|7d|30d|all
+# GET  /api/analytics?period=today
+# POST /api/analytics/assistant { "question": "오늘 KPI 요약", "period": "today" }
 # GET  /api/analytics/assistant
+# GET|POST /api/analytics/morning-report
 ```
 
 집계는 `src/lib/analytics/metrics.ts`가 DB에서 수행합니다. GPT는 스냅샷 JSON만 설명하며, 키 없으면 템플릿 요약으로 `ai_conversations`에 저장합니다.
+
+### 자동 집계 KPI (기본: 오늘, Asia/Seoul)
+
+| 지표 | 공식 |
+|------|------|
+| 판매 건수 | `orders` 수 (`CANCELLED` 제외, 기간 `orderedAt`) |
+| 매출 | `sum(subtotalKrw)` |
+| 순이익 | `sum(profitKrw)` |
+| 광고비 | `sum(ad_spends.amountKrw)` (기간 `date`) |
+| ROI | `순이익 / 광고비` (비율, UI는 ×100%) — 광고비 0이면 0 |
+| 환불률 | 환불 주문 수 / 판매 건수 (`REFUNDED` 또는 `refundedKrw > 0`) |
+
+데모: `npx tsx scripts/apply-ad-spend-migration.ts` → `npm run db:seed` → `/analytics`
 
 ## 주요 API (현재)
 

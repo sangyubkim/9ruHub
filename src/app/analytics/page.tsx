@@ -1,3 +1,4 @@
+import { MorningReportPanel } from "@/app/analytics/MorningReportPanel";
 import { OpsAssistantForm } from "@/app/analytics/OpsAssistantForm";
 import { PeriodToggle } from "@/app/analytics/PeriodToggle";
 import { listConversations } from "@/lib/analytics/assistant";
@@ -5,6 +6,7 @@ import {
   buildAnalyticsSnapshot,
   parseAnalyticsPeriod,
 } from "@/lib/analytics/metrics";
+import { getLatestMorningReport } from "@/lib/analytics/morning-report";
 
 export const dynamic = "force-dynamic";
 
@@ -26,9 +28,10 @@ export default async function AnalyticsPage({
 }) {
   const params = await searchParams;
   const period = parseAnalyticsPeriod(params.period);
-  const [snapshot, conversations] = await Promise.all([
+  const [snapshot, conversations, morningReport] = await Promise.all([
     buildAnalyticsSnapshot(undefined, period),
     listConversations(),
+    getLatestMorningReport(),
   ]);
   const r = snapshot.revenue;
   const rec = snapshot.recommendations;
@@ -143,6 +146,28 @@ export default async function AnalyticsPage({
               {snapshot.logistics.deliveredShipments}
             </li>
           </ul>
+        </div>
+      </section>
+
+      <section className="rounded-2xl border border-zinc-200 bg-white/80 p-5">
+        <h3 className="font-semibold">아침 브리핑</h3>
+        <p className="mt-1 text-sm text-zinc-600">
+          전일 대비 매출·경쟁가·재고·광고 중지 후보를 DB에서 계산합니다.
+        </p>
+        <div className="mt-4">
+          <MorningReportPanel
+            initialReport={
+              morningReport
+                ? {
+                    id: morningReport.id,
+                    reportDate: morningReport.reportDate.toISOString(),
+                    narrative: morningReport.narrative,
+                    usedGpt: morningReport.usedGpt,
+                    insights: morningReport.insights,
+                  }
+                : null
+            }
+          />
         </div>
       </section>
 

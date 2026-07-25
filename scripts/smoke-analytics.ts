@@ -4,17 +4,39 @@ import { buildAnalyticsSnapshot } from "../src/lib/analytics/metrics";
 import { prisma } from "../src/lib/db";
 
 async function main() {
-  const snapshot = await buildAnalyticsSnapshot();
+  const snapshot = await buildAnalyticsSnapshot(undefined, "today");
+  const r = snapshot.revenue;
+  const required = [
+    "orderCount",
+    "subtotalKrw",
+    "profitKrw",
+    "adSpendKrw",
+    "roi",
+    "refundRate",
+  ] as const;
+  for (const key of required) {
+    if (typeof r[key] !== "number") {
+      throw new Error(`missing revenue.${key}`);
+    }
+  }
+
   const answer = await askOpsAssistant({
-    question: "매출·마진·추천 성과를 한 줄로 요약해줘",
+    question: "오늘 판매·매출·순이익·광고비·ROI·환불률 한 줄 요약",
+    period: "today",
   });
+
   console.log(
     JSON.stringify(
       {
-        orderCount: snapshot.revenue.orderCount,
-        profitKrw: snapshot.revenue.profitKrw,
+        period: snapshot.period,
+        orderCount: r.orderCount,
+        subtotalKrw: r.subtotalKrw,
+        profitKrw: r.profitKrw,
+        adSpendKrw: r.adSpendKrw,
+        roiPct: Number((r.roi * 100).toFixed(1)),
+        refundRatePct: Number((r.refundRate * 100).toFixed(1)),
         conversationId: answer.conversationId,
-        answerPreview: answer.answer.slice(0, 160),
+        answerPreview: answer.answer.slice(0, 200),
       },
       null,
       2,

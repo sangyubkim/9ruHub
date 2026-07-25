@@ -13,6 +13,7 @@ export async function POST(request: Request) {
     const body = (await request.json()) as {
       question?: string;
       conversationId?: string;
+      period?: string;
     };
     if (!body.question?.trim()) {
       return NextResponse.json({ error: "question 필요" }, { status: 400 });
@@ -20,6 +21,7 @@ export async function POST(request: Request) {
     const result = await askOpsAssistant({
       question: body.question.trim(),
       conversationId: body.conversationId,
+      period: body.period,
     });
     return NextResponse.json(result);
   } catch (error) {

@@ -2,10 +2,17 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import type { AnalyticsPeriod } from "@/lib/analytics/metrics";
 
-export function OpsAssistantForm() {
+export function OpsAssistantForm({
+  period = "today",
+}: {
+  period?: AnalyticsPeriod;
+}) {
   const router = useRouter();
-  const [question, setQuestion] = useState("이번 매출과 마진, 추천 성과를 요약해줘");
+  const [question, setQuestion] = useState(
+    "오늘 판매 건수·매출·순이익·광고비·ROI·환불률을 요약해줘",
+  );
   const [busy, setBusy] = useState(false);
   const [answer, setAnswer] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -18,7 +25,7 @@ export function OpsAssistantForm() {
       const res = await fetch("/api/analytics/assistant", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ question }),
+        body: JSON.stringify({ question, period }),
       });
       const data = (await res.json()) as { error?: string; answer?: string };
       if (!res.ok) throw new Error(data.error ?? "실패");
