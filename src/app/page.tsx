@@ -76,7 +76,7 @@ export default async function HomePage() {
             href="/recommendations"
             className="rounded-full border border-zinc-300 bg-white px-5 py-2.5 text-sm hover:border-sky-500"
           >
-            AI 추천
+            AI 발굴
           </Link>
           <Link
             href="/drafts/new"

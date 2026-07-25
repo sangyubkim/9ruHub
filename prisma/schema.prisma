@@ -116,6 +116,19 @@ enum ConversationRole {
   SYSTEM
 }
 
+/// Demand-side mall for keyword discovery (① AI 상품 발굴)
+enum DemandMall {
+  NAVER
+  COUPANG // extension stub only
+}
+
+/// Supply-side mall for cost discovery (① AI 상품 발굴)
+enum SupplyMall {
+  MALL_1688
+  ALIEXPRESS // extension stub only
+  TAOBAO // extension stub only
+}
+
 // ─── SaaS: Tenant / User ─────────────────────────────────
 
 model Tenant {
@@ -135,6 +148,7 @@ model Tenant {
   shipments         Shipment[]
   recommendations   AiRecommendation[]
   conversations     AiConversation[]
+  productCandidates ProductCandidate[]
 
   @@map("tenants")
 }
@@ -448,6 +462,45 @@ model Shipment {
   @@map("shipments")
 }
 
+// ─── AI product discovery candidates (① Naver ↔ 1688) ───
+
+model ProductCandidate {
+  id                 String     @id @default(cuid())
+  tenantId           String
+  sourceDemandMall   DemandMall @default(NAVER)
+  sourceSupplyMall   SupplyMall @default(MALL_1688)
+  keyword            String
+  title              String
+  demandUrl          String?
+  supplyUrl          String?
+  externalDemandId   String?
+  externalSupplyId   String?
+  searchVolume       Int?
+  competition        Decimal?   @db.Decimal(8, 4)
+  reviewCount        Int?
+  rating             Decimal?   @db.Decimal(4, 2)
+  salesEstimate      Int?
+  /// Supply cost in CNY (1688)
+  costPrice          Decimal?   @db.Decimal(12, 2)
+  /// Suggested KRW sell price
+  sellPrice          Int?
+  marginRate         Decimal?   @db.Decimal(8, 4)
+  seasonalityScore   Decimal?   @db.Decimal(8, 4)
+  currency           String     @default("CNY")
+  isStub             Boolean    @default(true)
+  rawMetrics         Json?
+  createdAt          DateTime   @default(now())
+  updatedAt          DateTime   @updatedAt
+
+  tenant          Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  recommendations AiRecommendation[]
+
+  @@unique([tenantId, sourceDemandMall, sourceSupplyMall, keyword, externalSupplyId], map: "product_candidates_tenant_malls_kw_supply_key")
+  @@index([tenantId, keyword])
+  @@index([tenantId, createdAt])
+  @@map("product_candidates")
+}
+
 // ─── AI recommendations + conversations ─────────────────
 
 model AiRecommendation {
@@ -455,6 +508,7 @@ model AiRecommendation {
   tenantId        String
   productId       String?
   draftId         String?
+  candidateId     String?
   sourceUrl       String?
   externalId      String?
   title           String
@@ -473,13 +527,15 @@ model AiRecommendation {
   createdAt       DateTime             @default(now())
   updatedAt       DateTime             @updatedAt
 
-  tenant  Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  product Product?       @relation(fields: [productId], references: [id], onDelete: SetNull)
-  draft   ProductDraft?  @relation(fields: [draftId], references: [id], onDelete: SetNull)
+  tenant    Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  product   Product?          @relation(fields: [productId], references: [id], onDelete: SetNull)
+  draft     ProductDraft?     @relation(fields: [draftId], references: [id], onDelete: SetNull)
+  candidate ProductCandidate? @relation(fields: [candidateId], references: [id], onDelete: SetNull)
 
   @@index([tenantId, status, createdAt])
   @@index([tenantId, score])
   @@index([productId])
+  @@index([candidateId])
   @@map("ai_recommendations")
 }
 

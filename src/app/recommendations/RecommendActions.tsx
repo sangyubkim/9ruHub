@@ -13,17 +13,23 @@ export function RecommendActions({
   draftId?: string | null;
 }) {
   const router = useRouter();
-  const [busy, setBusy] = useState<"accept" | "ignore" | null>(null);
+  const [busy, setBusy] = useState<"accept" | "ignore" | "unignore" | null>(
+    null,
+  );
   const [error, setError] = useState<string | null>(null);
 
-  async function run(action: "accept" | "ignore") {
+  async function run(action: "accept" | "ignore" | "unignore") {
     setBusy(action);
     setError(null);
     try {
       const res = await fetch(`/api/recommendations/${id}/${action}`, {
         method: "POST",
       });
-      const data = (await res.json()) as { error?: string; draftId?: string; next?: string };
+      const data = (await res.json()) as {
+        error?: string;
+        draftId?: string;
+        next?: string;
+      };
       if (!res.ok) throw new Error(data.error ?? "요청 실패");
       if (action === "accept" && data.next) {
         router.push(data.next);
@@ -37,8 +43,23 @@ export function RecommendActions({
     }
   }
 
-  const locked =
-    status === "IGNORED" || status === "DRAFT_CREATED" || status === "CONVERTED";
+  if (status === "IGNORED") {
+    return (
+      <div className="mt-4 flex flex-wrap items-center gap-2">
+        <button
+          type="button"
+          disabled={busy !== null}
+          onClick={() => run("unignore")}
+          className="rounded-full border border-zinc-300 bg-white px-4 py-1.5 text-sm disabled:opacity-40"
+        >
+          {busy === "unignore" ? "처리 중…" : "무시 취소"}
+        </button>
+        {error ? <p className="w-full text-sm text-red-600">{error}</p> : null}
+      </div>
+    );
+  }
+
+  const locked = status === "DRAFT_CREATED" || status === "CONVERTED";
 
   return (
     <div className="mt-4 flex flex-wrap items-center gap-2">

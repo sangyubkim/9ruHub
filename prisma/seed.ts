@@ -54,6 +54,143 @@ async function main() {
     },
   });
 
+  // ① AI 상품 발굴 — Naver ↔ 1688 demo candidates (no live crawl)
+  const demoCandidates = [
+    {
+      keyword: "무선선풍기",
+      title: "무선선풍기 · 도매 오퍼 #1",
+      externalSupplyId: "seed-1688-fan-1",
+      searchVolume: 24500,
+      competition: 0.28,
+      reviewCount: 6200,
+      rating: 4.5,
+      salesEstimate: 980,
+      costPrice: 32.5,
+      sellPrice: 42900,
+      marginRate: 0.38,
+      seasonalityScore: 72,
+      score: 82,
+      label: "STRONG_BUY",
+    },
+    {
+      keyword: "캠핑랜턴",
+      title: "캠핑랜턴 · 도매 오퍼 #1",
+      externalSupplyId: "seed-1688-lantern-1",
+      searchVolume: 11200,
+      competition: 0.41,
+      reviewCount: 2100,
+      rating: 4.2,
+      salesEstimate: 420,
+      costPrice: 18.8,
+      sellPrice: 25900,
+      marginRate: 0.33,
+      seasonalityScore: 58,
+      score: 68,
+      label: "BUY",
+    },
+    {
+      keyword: "주방수납선반",
+      title: "주방수납선반 · 도매 오퍼 #1",
+      externalSupplyId: "seed-1688-shelf-1",
+      searchVolume: 3800,
+      competition: 0.55,
+      reviewCount: 890,
+      rating: 3.9,
+      salesEstimate: 140,
+      costPrice: 45.0,
+      sellPrice: 49900,
+      marginRate: 0.24,
+      seasonalityScore: 44,
+      score: 48,
+      label: "WATCH",
+    },
+  ] as const;
+
+  for (const demo of demoCandidates) {
+    const candidate = await prisma.productCandidate.upsert({
+      where: {
+        tenantId_sourceDemandMall_sourceSupplyMall_keyword_externalSupplyId: {
+          tenantId: tenant.id,
+          sourceDemandMall: "NAVER",
+          sourceSupplyMall: "MALL_1688",
+          keyword: demo.keyword,
+          externalSupplyId: demo.externalSupplyId,
+        },
+      },
+      create: {
+        tenantId: tenant.id,
+        sourceDemandMall: "NAVER",
+        sourceSupplyMall: "MALL_1688",
+        keyword: demo.keyword,
+        title: demo.title,
+        demandUrl: `https://search.shopping.naver.com/search/all?query=${encodeURIComponent(demo.keyword)}`,
+        supplyUrl: `https://detail.1688.com/offer/${demo.externalSupplyId}.html`,
+        externalDemandId: `seed-naver-${demo.keyword}`,
+        externalSupplyId: demo.externalSupplyId,
+        searchVolume: demo.searchVolume,
+        competition: demo.competition,
+        reviewCount: demo.reviewCount,
+        rating: demo.rating,
+        salesEstimate: demo.salesEstimate,
+        costPrice: demo.costPrice,
+        sellPrice: demo.sellPrice,
+        marginRate: demo.marginRate,
+        seasonalityScore: demo.seasonalityScore,
+        currency: "CNY",
+        isStub: true,
+        rawMetrics: { seed: true, pair: "NAVER↔1688" },
+      },
+      update: {
+        title: demo.title,
+        searchVolume: demo.searchVolume,
+        competition: demo.competition,
+        reviewCount: demo.reviewCount,
+        rating: demo.rating,
+        salesEstimate: demo.salesEstimate,
+        costPrice: demo.costPrice,
+        sellPrice: demo.sellPrice,
+        marginRate: demo.marginRate,
+        seasonalityScore: demo.seasonalityScore,
+        isStub: true,
+      },
+    });
+
+    const existingCandRec = await prisma.aiRecommendation.findFirst({
+      where: { tenantId: tenant.id, candidateId: candidate.id },
+    });
+    if (!existingCandRec) {
+      await prisma.aiRecommendation.create({
+        data: {
+          tenantId: tenant.id,
+          candidateId: candidate.id,
+          sourceUrl: candidate.supplyUrl,
+          externalId: candidate.externalSupplyId,
+          title: candidate.title,
+          score: demo.score,
+          scoreBreakdown: {
+            total: demo.score,
+            label: demo.label,
+            reasons: ["시드 발굴 샘플", "네이버↔1688"],
+            features: {
+              searchVolume: demo.searchVolume,
+              competition: demo.competition,
+              marginRate: demo.marginRate,
+              rating: demo.rating,
+              reviewCount: demo.reviewCount,
+              seasonalityScore: demo.seasonalityScore,
+              costPriceCny: demo.costPrice,
+              sellPriceKrw: demo.sellPrice,
+            },
+          },
+          status: "PENDING",
+          reasonCode: demo.label,
+          reasonText: `시드 발굴 샘플입니다. 규칙 점수 ${demo.score}점(${demo.label}). 네이버 검색량 ${demo.searchVolume.toLocaleString("ko-KR")}, 예상 마진 ${(demo.marginRate * 100).toFixed(0)}%.`,
+          detailHtml: `<section><h2>시드 발굴 상세</h2><p>${demo.keyword} 데모 후보입니다.</p></section>`,
+        },
+      });
+    }
+  }
+
   // Step 1 demo recommendation (rule score + template reason)
   const demoProduct = await prisma.product.findFirst({
     where: { tenantId: tenant.id },
@@ -189,7 +326,7 @@ async function main() {
   }
 
   console.log(
-    "Seed complete: demo tenant + owner + PriceRule (+ sample rec/order/shipment/conversation)",
+    "Seed complete: demo tenant + owner + PriceRule (+ discover candidates/rec/order/shipment/conversation)",
   );
   console.log(`  tenantId=${tenant.id}`);
 }

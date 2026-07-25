@@ -1,6 +1,10 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import {
+  activeRecommendationWhere,
+  ignoredRecommendationWhere,
+} from "@/lib/recommend/filters";
+import {
   createRecommendationFromUrl,
   generateRecommendationsForTenant,
 } from "@/lib/recommend/engine";
@@ -8,10 +12,17 @@ import { getDefaultTenantId } from "@/lib/tenant";
 
 export const dynamic = "force-dynamic";
 
-export async function GET() {
+export async function GET(request: Request) {
   const tenantId = await getDefaultTenantId();
+  const { searchParams } = new URL(request.url);
+  const showIgnored =
+    searchParams.get("ignored") === "1" ||
+    searchParams.get("ignored") === "true";
+
   const items = await prisma.aiRecommendation.findMany({
-    where: { tenantId },
+    where: showIgnored
+      ? ignoredRecommendationWhere(tenantId)
+      : activeRecommendationWhere(tenantId),
     orderBy: [{ score: "desc" }, { createdAt: "desc" }],
     include: {
       product: true,
@@ -19,7 +30,7 @@ export async function GET() {
     },
     take: 100,
   });
-  return NextResponse.json({ tenantId, items });
+  return NextResponse.json({ tenantId, items, ignored: showIgnored });
 }
 
 export async function POST(request: Request) {

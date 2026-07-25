@@ -9,6 +9,7 @@ Amazon US 소싱 → 초안 → 채널 등록/동기화에 더해, **SaaS 멀티
 | Step | 기능 | 상태 |
 |------|------|------|
 | 0 | SaaS DB/ERD (tenants, products, orders, shipments, AI) | **완료** |
+| ① | AI 상품 발굴 MVP (네이버 키워드 ↔ 1688 원가, 규칙 점수) | **완료** |
 | 1 | 규칙 추천 + GPT 이유/상세 + 원클릭 초안 | **완료** |
 | 2 | 주문 관리 + 중국몰 자동주문 어댑터(스텁) | **완료** |
 | 3 | 배대지 + 송장 자동등록 어댑터 | **완료** |
@@ -37,6 +38,7 @@ erDiagram
   tenants ||--o{ shipments : scopes
   tenants ||--o{ ai_recommendations : scopes
   tenants ||--o{ ai_conversations : scopes
+  tenants ||--o{ product_candidates : scopes
   SourceProduct ||--o{ ProductDraft : drafts
   ProductDraft ||--o{ ChannelListing : lists
   ProductDraft ||--o{ SyncJob : syncs
@@ -44,10 +46,11 @@ erDiagram
   products ||--o{ order_items : sold_as
   orders ||--o{ order_items : contains
   orders ||--|| shipments : ships
+  product_candidates ||--o{ ai_recommendations : scores
   ai_conversations ||--o{ ai_conversation_messages : messages
 ```
 
-핵심 테이블: `tenants` / `users` / `tenant_members`, `products`, `product_price_history`, `orders` / `order_items`, `shipments`, `ai_recommendations`, `ai_conversations`(+messages).  
+핵심 테이블: `tenants` / `users` / `tenant_members`, `products`, `product_price_history`, `product_candidates`, `orders` / `order_items`, `shipments`, `ai_recommendations`, `ai_conversations`(+messages).  
 비즈니스 테이블은 `tenantId` + 시간 인덱스. 기존 `SourceProduct`→`ProductDraft`→채널 흐름은 유지하며 초안 생성 시 `products`/`product_price_history`에 동기화합니다.
 
 ## 실행 방법
@@ -70,10 +73,12 @@ npm run db:dev
 
 ```bash
 npm run db:migrate
+# Prisma local에서 db push/migrate가 portal 오류면:
+# npx tsx scripts/apply-discover-migration.ts
 npm run db:seed
 ```
 
-시드: demo 테넌트(`slug=demo`) + owner + 기본 PriceRule.
+시드: demo 테넌트(`slug=demo`) + owner + 기본 PriceRule + 네이버↔1688 발굴 샘플 후보.
 
 **대안: Docker**
 
@@ -102,7 +107,8 @@ http://localhost:3000
 | `USD_TO_KRW` 등 | 가격 규칙 폴백 |
 | `SMARTSTORE_*` / `COUPANG_*` | 채널 API (없으면 스텁) |
 | `CRON_SECRET` | 배치 동기화 보호 |
-| `OPENAI_API_KEY` / `OPENAI_MODEL` | Step 1+ GPT (없으면 템플릿 폴백) |
+| `OPENAI_API_KEY` / `OPENAI_MODEL` | Step 1+ / ① 발굴 이유 GPT (없으면 템플릿 폴백) |
+| `DISCOVER_*` / `CNY_TO_KRW` | ① 발굴 어댑터·원가 환산 (기본 스텁) |
 | `CHINA_MALL_ADAPTER` 등 | Step 2 중국몰 (기본 stub) |
 | `FORWARDER_ADAPTER` 등 | Step 3 배대지 (기본 stub) |
 
@@ -114,11 +120,30 @@ npm run sync:scheduler
 curl -X POST http://localhost:3000/api/cron/sync
 ```
 
-## Step 1 — 추천
+## ① AI 상품 발굴 MVP (Naver ↔ 1688)
+
+점수는 **코드 규칙**(`src/lib/discover/score.ts`)이 계산합니다. GPT는 추천 이유 문구만 담당합니다.
+
+```bash
+# CLI
+npm run discover:keyword -- "무선선풍기"
+npm run smoke:discover
+
+# UI: /recommendations → 「키워드로 발굴」
+# API:
+# POST /api/discover { "keyword": "무선선풍기" }
+# GET  /api/discover
+```
+
+흐름: 수요 어댑터(네이버 스텁) + 공급 어댑터(1688 스텁) → `product_candidates` upsert → 규칙 점수 → `ai_recommendations` 생성 → UI.  
+수락 시 Amazon fetch 없이 후보 메타데이터로 `ProductDraft`를 만듭니다.  
+쿠팡/Ali/타오바오는 확장 스텁만 두었습니다(`DISCOVER_*_ADAPTER`). 라이브 크롤은 Playwright 이후 단계입니다.
+
+## Step 1 — 추천 (Amazon / 기존 상품)
 
 ```bash
 npm run recommend:generate
-# 또는 UI: /recommendations
+# 또는 UI: /recommendations (Amazon URL / 기존 스캔)
 # API:
 # POST /api/recommendations { "generate": true }
 # POST /api/recommendations { "url": "https://www.amazon.com/dp/..." }
@@ -168,6 +193,7 @@ npm run recommend:generate
 - `POST /api/drafts/:id/approve`
 - `POST /api/drafts/:id/publish`
 - `POST /api/drafts/:id/sync`
+- `GET|POST /api/discover` `{ "keyword": "..." }`
 - `GET|POST /api/recommendations`
 - `POST /api/recommendations/:id/accept|ignore`
 - `GET|POST /api/orders`
@@ -189,6 +215,7 @@ npm test
 npm run smoke:draft
 npm run smoke:shipment
 npm run smoke:analytics
+npm run smoke:discover
 ```
 
 ## Stage 5 (남은 일)
