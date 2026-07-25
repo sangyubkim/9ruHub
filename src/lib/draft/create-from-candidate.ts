@@ -7,6 +7,8 @@ import {
 } from "@/generated/prisma/client";
 import { prisma } from "@/lib/db";
 import { DEFAULT_NOTICE } from "@/lib/draft/detail-template";
+import { defaultPriceRuleFromEnv } from "@/lib/price-engine";
+import { recommendSalePrice } from "@/lib/pricing/recommend";
 import { getDefaultTenantId, upsertProductFromDraft } from "@/lib/tenant";
 
 function toJson(value: unknown): Prisma.InputJsonValue {
@@ -35,9 +37,38 @@ export async function createDraftFromCandidate(
     candidate.demandUrl ??
     `discover://${candidate.keyword}`;
   const costCny = candidate.costPrice ? Number(candidate.costPrice) : 0;
-  const sellPriceKrw = candidate.sellPrice ?? 0;
   const cnyToKrw = Number(process.env.CNY_TO_KRW ?? 190);
   const sourcePriceUsdApprox = costCny > 0 ? (costCny * cnyToKrw) / 1380 : 1;
+  const envRule = defaultPriceRuleFromEnv();
+  const marketHint =
+    candidate.sellPrice != null && candidate.sellPrice > 0
+      ? candidate.sellPrice
+      : null;
+  const priced =
+    costCny > 0
+      ? recommendSalePrice({
+          cost: costCny,
+          currency: "CNY",
+          cnyToKrw,
+          chinaShipping: envRule.chinaShippingFeeKrw ?? 0,
+          intlShipping:
+            envRule.intlShippingFeeKrw ?? envRule.shippingFeeKrw,
+          dutyRate: envRule.dutyRate,
+          cardFeeRate: envRule.cardFeeRate ?? 0.025,
+          platformFeeRate: envRule.platformFeeRate,
+          agencyFee: envRule.agencyFeeKrw,
+          marginRate:
+            candidate.marginRate != null
+              ? Number(candidate.marginRate)
+              : envRule.marginRate,
+          minMarginRate: envRule.minMarginRate,
+          undercutRate: envRule.undercutRate,
+          roundTo: envRule.roundTo,
+          competitors: marketHint ? [marketHint] : undefined,
+        })
+      : null;
+  const sellPriceKrw =
+    priced?.recommendedSalePriceKrw ?? candidate.sellPrice ?? 0;
 
   const sourceProduct = await prisma.sourceProduct.upsert({
     where: {
@@ -111,13 +142,25 @@ export async function createDraftFromCandidate(
       titleKo: candidate.title,
       detailHtml,
       salePriceKrw: sellPriceKrw,
-      costBreakdown: toJson({
-        mode: "discover-candidate",
-        costPriceCny: costCny,
-        marginRate: candidate.marginRate ? Number(candidate.marginRate) : null,
-        sellPriceKrw,
-        isStub: candidate.isStub,
-      }),
+      costBreakdown: toJson(
+        priced
+          ? {
+              ...priced.costBreakdown,
+              mode: "discover-candidate",
+              costPriceCny: costCny,
+              marketHintKrw: marketHint,
+              isStub: candidate.isStub,
+            }
+          : {
+              mode: "discover-candidate",
+              costPriceCny: costCny,
+              marginRate: candidate.marginRate
+                ? Number(candidate.marginRate)
+                : null,
+              sellPriceKrw,
+              isStub: candidate.isStub,
+            },
+      ),
       images: toJson([]),
       options: toJson([]),
       noticeText: DEFAULT_NOTICE,

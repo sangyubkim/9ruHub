@@ -6,6 +6,7 @@ import { prisma } from "@/lib/db";
 import { getDefaultTenantId } from "@/lib/tenant";
 import { DraftActions } from "./DraftActions";
 import { DraftEditForm } from "./DraftEditForm";
+import { DraftPricingPanel } from "./DraftPricingPanel";
 
 export const dynamic = "force-dynamic";
 
@@ -31,7 +32,13 @@ export default async function DraftDetailPage({ params }: Props) {
   if (!draft) notFound();
 
   const images = Array.isArray(draft.images) ? (draft.images as string[]) : [];
-  const breakdown = draft.costBreakdown as Record<string, number>;
+  const breakdown = draft.costBreakdown as Record<string, unknown>;
+  const sourcePriceKrw =
+    typeof breakdown.sourcePriceKrw === "number"
+      ? breakdown.sourcePriceKrw
+      : typeof breakdown.sourceCostKrw === "number"
+        ? breakdown.sourceCostKrw
+        : null;
 
   return (
     <div className="space-y-6">
@@ -73,8 +80,11 @@ export default async function DraftDetailPage({ params }: Props) {
             <div>
               <dt className="text-zinc-500">원가</dt>
               <dd>
-                ${Number(draft.sourceProduct.sourcePrice)} /{" "}
-                {breakdown.sourcePriceKrw?.toLocaleString("ko-KR")}원
+                {draft.sourceProduct.currency === "USD" ? "$" : ""}
+                {Number(draft.sourceProduct.sourcePrice)}
+                {sourcePriceKrw != null
+                  ? ` / ${sourcePriceKrw.toLocaleString("ko-KR")}원`
+                  : ""}
               </dd>
             </div>
             <div>
@@ -110,6 +120,14 @@ export default async function DraftDetailPage({ params }: Props) {
           reviewNote={draft.reviewNote}
         />
       </div>
+
+      <DraftPricingPanel
+        draftId={draft.id}
+        salePriceKrw={draft.salePriceKrw}
+        breakdown={breakdown}
+        sourcePrice={Number(draft.sourceProduct.sourcePrice)}
+        currency={draft.sourceProduct.currency}
+      />
 
       <section className="rounded-2xl border border-zinc-200 bg-white/90 p-5">
         <h3 className="font-semibold">채널 리스팅</h3>

@@ -30,7 +30,8 @@ function toJson(value: unknown): Prisma.InputJsonValue {
 
 async function getPriceRule(tenantId: string): Promise<PriceRuleInput> {
   const saved = await getTenantPriceRule(tenantId);
-  if (!saved) return defaultPriceRuleFromEnv();
+  const env = defaultPriceRuleFromEnv();
+  if (!saved) return env;
   return {
     usdToKrw: Number(saved.usdToKrw),
     marginRate: Number(saved.marginRate),
@@ -39,6 +40,11 @@ async function getPriceRule(tenantId: string): Promise<PriceRuleInput> {
     platformFeeRate: Number(saved.platformFeeRate),
     dutyRate: Number(saved.dutyRate),
     roundTo: saved.roundTo,
+    chinaShippingFeeKrw: env.chinaShippingFeeKrw,
+    intlShippingFeeKrw: env.intlShippingFeeKrw,
+    cardFeeRate: env.cardFeeRate,
+    minMarginRate: env.minMarginRate,
+    undercutRate: env.undercutRate,
   };
 }
 

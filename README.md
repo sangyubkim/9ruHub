@@ -104,7 +104,7 @@ http://localhost:3000
 | 변수 | 설명 |
 |------|------|
 | `DATABASE_URL` | PostgreSQL |
-| `USD_TO_KRW` 등 | 가격 규칙 폴백 |
+| `USD_TO_KRW` / `MARGIN_RATE` / `CHINA_SHIPPING_FEE_KRW` / `INTL_SHIPPING_FEE_KRW` / `CARD_FEE_RATE` / `COMPETITOR_UNDERCUT_RATE` 등 | AI 추천 판매가·PriceRule 폴백 |
 | `SMARTSTORE_*` / `COUPANG_*` | 채널 API (없으면 스텁) |
 | `CRON_SECRET` | 배치 동기화 보호 |
 | `OPENAI_API_KEY` / `OPENAI_MODEL` | Step 1+ / ① 발굴 이유 GPT (없으면 템플릿 폴백) |
@@ -138,6 +138,28 @@ npm run smoke:discover
 흐름: 수요 어댑터(네이버 스텁) + 공급 어댑터(1688 스텁) → `product_candidates` upsert → 규칙 점수 → `ai_recommendations` 생성 → UI.  
 수락 시 Amazon fetch 없이 후보 메타데이터로 `ProductDraft`를 만듭니다.  
 쿠팡/Ali/타오바오는 확장 스텁만 두었습니다(`DISCOVER_*_ADAPTER`). 라이브 크롤은 Playwright 이후 단계입니다.
+
+## AI 가격 결정 (추천 판매가)
+
+원가 + 중국/국제배송 + 관세 + 대행수수료에 마진을 얹고, 카드·플랫폼 수수료를 보정한 뒤 **경쟁상품 가격 밴드**로 클램프합니다. 숫자는 `src/lib/pricing/recommend.ts` 규칙 엔진이 계산합니다 (GPT 불필요).
+
+```bash
+# UI: /pricing 또는 초안 상세의 「AI 가격 결정」
+# API:
+# POST /api/pricing/recommend
+# {
+#   "cost": 20000,
+#   "chinaShipping": 3000,
+#   "intlShipping": 12000,
+#   "dutyRate": 0.08,
+#   "cardFeeRate": 0.025,
+#   "platformFeeRate": 0.1,
+#   "competitors": [59000, 62000, 65000],
+#   "applyDraftId": "optional-draft-id"
+# }
+```
+
+전략: cost-plus → 경쟁 평균보다 소폭 낮게 맞춤(마진 여유 시). 여유 없으면 최소 마진(`MIN_MARGIN_RATE`)으로 클램프. 경쟁가 없으면 cost-plus 그대로.
 
 ## Step 1 — 추천 (Amazon / 기존 상품)
 
@@ -178,13 +200,26 @@ npm run recommend:generate
 ## Step 4 — 수익분석 / 운영 비서
 
 ```bash
-# UI: /analytics
-# GET  /api/analytics
-# POST /api/analytics/assistant { "question": "마진 요약해줘" }
+# UI: /analytics?period=today|7d|30d|all
+# GET  /api/analytics?period=today
+# POST /api/analytics/assistant { "question": "오늘 KPI 요약", "period": "today" }
 # GET  /api/analytics/assistant
 ```
 
 집계는 `src/lib/analytics/metrics.ts`가 DB에서 수행합니다. GPT는 스냅샷 JSON만 설명하며, 키 없으면 템플릿 요약으로 `ai_conversations`에 저장합니다.
+
+### 자동 집계 KPI (기본: 오늘, Asia/Seoul)
+
+| 지표 | 공식 |
+|------|------|
+| 판매 건수 | `orders` 수 (`CANCELLED` 제외, 기간 `orderedAt`) |
+| 매출 | `sum(subtotalKrw)` |
+| 순이익 | `sum(profitKrw)` |
+| 광고비 | `sum(ad_spends.amountKrw)` (기간 `date`) |
+| ROI | `순이익 / 광고비` (비율, UI는 ×100%) — 광고비 0이면 0 |
+| 환불률 | 환불 주문 수 / 판매 건수 (`REFUNDED` 또는 `refundedKrw > 0`) |
+
+데모 시드: `npm run db:seed` 후 `/analytics`에서 오늘 기준 비제로 KPI를 확인할 수 있습니다.
 
 ## 주요 API (현재)
 
@@ -194,6 +229,7 @@ npm run recommend:generate
 - `POST /api/drafts/:id/publish`
 - `POST /api/drafts/:id/sync`
 - `GET|POST /api/discover` `{ "keyword": "..." }`
+- `POST /api/pricing/recommend` `{ cost, chinaShipping?, intlShipping?, competitors?, applyDraftId? }`
 - `GET|POST /api/recommendations`
 - `POST /api/recommendations/:id/accept|ignore`
 - `GET|POST /api/orders`

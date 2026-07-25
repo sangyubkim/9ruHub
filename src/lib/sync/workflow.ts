@@ -200,6 +200,7 @@ export async function syncDraftPriceStock(draftId: string) {
   try {
     const fresh = await fetchAmazonUsProduct(draft.sourceProduct.sourceUrl);
     const rule = await getTenantPriceRule(draft.tenantId);
+    const envRule = defaultPriceRuleFromEnv();
     const priceRule = rule
       ? {
           usdToKrw: Number(rule.usdToKrw),
@@ -209,8 +210,13 @@ export async function syncDraftPriceStock(draftId: string) {
           platformFeeRate: Number(rule.platformFeeRate),
           dutyRate: Number(rule.dutyRate),
           roundTo: rule.roundTo,
+          chinaShippingFeeKrw: envRule.chinaShippingFeeKrw,
+          intlShippingFeeKrw: envRule.intlShippingFeeKrw,
+          cardFeeRate: envRule.cardFeeRate,
+          minMarginRate: envRule.minMarginRate,
+          undercutRate: envRule.undercutRate,
         }
-      : defaultPriceRuleFromEnv();
+      : envRule;
 
     const breakdown = calculateSalePrice(fresh.sourcePrice, priceRule);
 
