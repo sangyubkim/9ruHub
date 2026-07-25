@@ -12,7 +12,7 @@ Amazon US 소싱 → 초안 → 채널 등록/동기화에 더해, **SaaS 멀티
 | 1 | 규칙 추천 + GPT 이유/상세 + 원클릭 초안 | **완료** |
 | 2 | 주문 관리 + 중국몰 자동주문 어댑터(스텁) | **완료** |
 | 3 | 배대지 + 송장 자동등록 어댑터 | **완료** |
-| 4 | AI 수익분석 대시보드 + 운영 비서 | 진행 예정 |
+| 4 | AI 수익분석 대시보드 + 운영 비서 | **완료** |
 | 5 | SaaS 빌링 / 멀티유저 고도화 | 미착수 |
 
 기존 Phase 1–2 유지: URL/엑셀 초안, 승인→SmartStore/Coupang 등록(키 없으면 스텁), 가격·재고 동기화+스케줄러.
@@ -150,6 +150,17 @@ npm run recommend:generate
 
 `FORWARDER_ADAPTER=stub` 기본. 채널 송장 등록도 스텁이며 live 훅 자리만 열어 둡니다.
 
+## Step 4 — 수익분석 / 운영 비서
+
+```bash
+# UI: /analytics
+# GET  /api/analytics
+# POST /api/analytics/assistant { "question": "마진 요약해줘" }
+# GET  /api/analytics/assistant
+```
+
+집계는 `src/lib/analytics/metrics.ts`가 DB에서 수행합니다. GPT는 스냅샷 JSON만 설명하며, 키 없으면 템플릿 요약으로 `ai_conversations`에 저장합니다.
+
 ## 주요 API (현재)
 
 - `POST /api/drafts` `{ "url": "https://www.amazon.com/dp/ASIN" }`
@@ -164,6 +175,8 @@ npm run recommend:generate
 - `POST /api/orders/:id/purchase`
 - `GET|POST /api/shipments`
 - `POST /api/shipments/:id/track|invoice`
+- `GET /api/analytics`
+- `GET|POST /api/analytics/assistant`
 
 - `GET /api/channels/status`
 - `GET|POST /api/cron/sync`

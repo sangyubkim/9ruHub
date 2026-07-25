@@ -1,13 +1,14 @@
 import Link from "next/link";
 
 const links = [
-  { href: "/", label: "대시보드" },
+  { href: "/", label: "홈" },
+  { href: "/analytics", label: "수익분석" },
   { href: "/recommendations", label: "AI 추천" },
   { href: "/orders", label: "주문" },
   { href: "/shipments", label: "물류" },
-  { href: "/drafts", label: "초안 목록" },
-  { href: "/drafts/new", label: "URL 등록" },
-  { href: "/drafts/import", label: "엑셀 대량" },
+  { href: "/drafts", label: "초안" },
+  { href: "/drafts/new", label: "URL" },
+  { href: "/drafts/import", label: "엑셀" },
 ];
 
 export function AppShell({ children }: { children: React.ReactNode }) {
