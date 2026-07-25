@@ -24,6 +24,7 @@ const sampleInput = {
 describe("ai-detail parser / fallback", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
+    delete process.env.GEMINI_API_KEY;
     delete process.env.OPENAI_API_KEY;
   });
 
@@ -77,31 +78,37 @@ describe("ai-detail parser / fallback", () => {
   });
 
   it("generateAiDetail uses template when API key missing", async () => {
-    delete process.env.OPENAI_API_KEY;
+    delete process.env.GEMINI_API_KEY;
     const content = await generateAiDetail(sampleInput);
     expect(content.usedGpt).toBe(false);
     expect(content.detailHtml).toContain("FAQ");
   });
 
-  it("generateAiDetail uses mocked GPT response", async () => {
-    process.env.OPENAI_API_KEY = "test-key";
+  it("generateAiDetail uses mocked Gemini response", async () => {
+    process.env.GEMINI_API_KEY = "test-key";
+    process.env.GEMINI_MODEL = "gemini-flash-lite-latest";
     vi.stubGlobal(
       "fetch",
       vi.fn().mockResolvedValue({
         ok: true,
         json: async () => ({
-          choices: [
+          candidates: [
             {
-              message: {
-                content: JSON.stringify({
-                  titleKo: "GPT 제목",
-                  keywords: ["키워드A"],
-                  detailHtml: "<section><h2>GPT</h2><p>본문</p></section>",
-                  options: [{ name: "Size", values: ["Large"] }],
-                  noticeText: "고지GPT",
-                  translationNote: "영→한",
-                  sourceLang: "en",
-                }),
+              content: {
+                parts: [
+                  {
+                    text: JSON.stringify({
+                      titleKo: "Gemini 제목",
+                      keywords: ["키워드A"],
+                      detailHtml:
+                        "<section><h2>Gemini</h2><p>본문</p></section>",
+                      options: [{ name: "Size", values: ["Large"] }],
+                      noticeText: "고지Gemini",
+                      translationNote: "영→한",
+                      sourceLang: "en",
+                    }),
+                  },
+                ],
               },
             },
           ],
@@ -111,7 +118,7 @@ describe("ai-detail parser / fallback", () => {
 
     const content = await generateAiDetail(sampleInput);
     expect(content.usedGpt).toBe(true);
-    expect(content.titleKo).toBe("GPT 제목");
+    expect(content.titleKo).toBe("Gemini 제목");
     expect(content.keywords).toEqual(["키워드A"]);
     expect(content.options[0]?.name).toBe("사이즈");
   });

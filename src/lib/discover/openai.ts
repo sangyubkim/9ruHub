@@ -1,3 +1,4 @@
+import { geminiChatJson, getGeminiConfig } from "@/lib/ai/gemini";
 import type { DiscoverScoreBreakdown } from "@/lib/discover/score";
 import type { JoinedCandidateMetrics } from "@/lib/discover/types";
 
@@ -9,53 +10,6 @@ const REASON_SYSTEM = `당신은 한국 구매대행 셀러를 돕는 카피라�
 
 const DETAIL_SYSTEM = `당신은 구매대행 상품 발굴 상세 작성기입니다.
 제공된 JSON 사실만 사용하세요. 한국어 HTML fragment만 반환: {"detailHtml":"..."}`;
-
-function getOpenAiConfig() {
-  const apiKey = process.env.OPENAI_API_KEY?.trim();
-  const model = process.env.OPENAI_MODEL?.trim() || "gpt-4o-mini";
-  return { apiKey, model };
-}
-
-async function chatJson(
-  system: string,
-  userPayload: unknown,
-): Promise<Record<string, unknown> | null> {
-  const { apiKey, model } = getOpenAiConfig();
-  if (!apiKey) return null;
-
-  const res = await fetch("https://api.openai.com/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      model,
-      temperature: 0.4,
-      response_format: { type: "json_object" },
-      messages: [
-        { role: "system", content: system },
-        { role: "user", content: JSON.stringify(userPayload) },
-      ],
-    }),
-  });
-
-  if (!res.ok) {
-    console.warn("OpenAI discover chat failed", res.status, await res.text());
-    return null;
-  }
-
-  const data = (await res.json()) as {
-    choices?: Array<{ message?: { content?: string } }>;
-  };
-  const content = data.choices?.[0]?.message?.content;
-  if (!content) return null;
-  try {
-    return JSON.parse(content) as Record<string, unknown>;
-  } catch {
-    return null;
-  }
-}
 
 export function templateDiscoverReason(
   metrics: JoinedCandidateMetrics,
@@ -87,7 +41,7 @@ export function templateDiscoverDetailHtml(
 }
 
 /**
- * GPT는 추천 이유/상세만 생성. 점수·숫자는 코드 입력을 그대로 사용.
+ * Gemini는 추천 이유/상세만 생성. 점수·숫자는 코드 입력을 그대로 사용.
  */
 export async function generateDiscoverRecommendCopy(
   metrics: JoinedCandidateMetrics,
@@ -99,8 +53,7 @@ export async function generateDiscoverRecommendCopy(
     usedGpt: false,
   };
 
-  const { apiKey } = getOpenAiConfig();
-  if (!apiKey) return fallback;
+  if (!getGeminiConfig().enabled) return fallback;
 
   const payload = {
     task: "discover_recommend_reason",
@@ -128,8 +81,8 @@ export async function generateDiscoverRecommendCopy(
 
   try {
     const [reasonJson, detailJson] = await Promise.all([
-      chatJson(REASON_SYSTEM, payload),
-      chatJson(DETAIL_SYSTEM, payload),
+      geminiChatJson(REASON_SYSTEM, payload),
+      geminiChatJson(DETAIL_SYSTEM, payload),
     ]);
 
     const reasonText =

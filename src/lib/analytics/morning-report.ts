@@ -1,4 +1,5 @@
 import { ConversationRole, Prisma } from "@/generated/prisma/client";
+import { geminiChatText } from "@/lib/ai/gemini";
 import {
   buildMorningInsights,
   templateMorningNarrative,
@@ -152,42 +153,14 @@ async function gptNarrative(
   reportDate: string,
   insights: MorningInsight[],
 ): Promise<string | null> {
-  const apiKey = process.env.OPENAI_API_KEY?.trim();
-  if (!apiKey) return null;
-  const model = process.env.OPENAI_MODEL?.trim() || "gpt-4o-mini";
-
-  const res = await fetch("https://api.openai.com/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      model,
-      temperature: 0.3,
-      messages: [
-        {
-          role: "system",
-          content: `당신은 구매대행 운영 비서입니다.
+  return geminiChatText(
+    `당신은 구매대행 운영 비서입니다.
 주어진 insights JSON의 message/data만 사용해 매일 아침 브리핑을 한국어로 작성하세요.
 새로운 숫자·상품·사실을 만들지 마세요.
 형식: 짧은 인사 1줄 + 번호 목록(각 insight.message를 자연스럽게) + 마무리 1줄.`,
-        },
-        {
-          role: "user",
-          content: JSON.stringify({ reportDate, insights }),
-        },
-      ],
-    }),
-  });
-  if (!res.ok) {
-    console.warn("morning report GPT failed", res.status, await res.text());
-    return null;
-  }
-  const data = (await res.json()) as {
-    choices?: Array<{ message?: { content?: string } }>;
-  };
-  return data.choices?.[0]?.message?.content?.trim() || null;
+    { reportDate, insights },
+    0.3,
+  );
 }
 
 export async function generateMorningReport(options?: {

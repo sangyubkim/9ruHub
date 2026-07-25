@@ -174,7 +174,7 @@ export default async function AnalyticsPage({
       <section className="rounded-2xl border border-zinc-200 bg-white/80 p-5">
         <h3 className="font-semibold">운영 비서</h3>
         <p className="mt-1 text-sm text-zinc-600">
-          DB 집계 컨텍스트 기반 설명 (OPENAI_API_KEY 없으면 템플릿 요약)
+          DB 집계 컨텍스트 기반 설명 (GEMINI_API_KEY 없으면 템플릿 요약)
         </p>
         <OpsAssistantForm period={period} />
         {conversations[0] ? (

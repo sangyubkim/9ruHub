@@ -26,6 +26,8 @@
     "smoke:forwarder-invoice": "tsx scripts/smoke-forwarder-invoice.ts",
     "smoke:analytics": "tsx scripts/smoke-analytics.ts",
     "smoke:morning-report": "tsx scripts/smoke-morning-report.ts",
+    "ai:import-gemini": "tsx scripts/import-gemini-from-9rutrip.ts",
+    "smoke:gemini": "tsx scripts/smoke-gemini.ts",
     "smoke:discover": "tsx scripts/smoke-discover.ts",
     "report:morning": "tsx scripts/smoke-morning-report.ts",
     "discover:keyword": "tsx scripts/discover-keyword.ts",

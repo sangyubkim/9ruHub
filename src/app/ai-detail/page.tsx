@@ -82,7 +82,7 @@ export default function AiDetailPage() {
         </h2>
         <p className="mt-1 text-sm text-zinc-600">
           Amazon US URL 한 개로 한국어 제목·키워드·상세 HTML·옵션·번역 메모를
-          생성합니다. OPENAI_API_KEY가 없으면 고품질 템플릿으로 폴백합니다.
+          생성합니다. GEMINI_API_KEY가 없으면 고품질 템플릿으로 폴백합니다.
         </p>
       </div>
 

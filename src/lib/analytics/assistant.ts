@@ -1,4 +1,5 @@
 import { ConversationRole, Prisma } from "@/generated/prisma/client";
+import { geminiChatText } from "@/lib/ai/gemini";
 import {
   buildAnalyticsSnapshot,
   parseAnalyticsPeriod,
@@ -40,36 +41,7 @@ async function gptExplain(
   snapshot: AnalyticsSnapshot,
   question: string,
 ): Promise<string | null> {
-  const apiKey = process.env.OPENAI_API_KEY?.trim();
-  if (!apiKey) return null;
-  const model = process.env.OPENAI_MODEL?.trim() || "gpt-4o-mini";
-
-  const res = await fetch("https://api.openai.com/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      model,
-      temperature: 0.2,
-      messages: [
-        { role: "system", content: SYSTEM_PROMPT },
-        {
-          role: "user",
-          content: JSON.stringify({ question, metrics: snapshot }),
-        },
-      ],
-    }),
-  });
-  if (!res.ok) {
-    console.warn("ops assistant GPT failed", res.status, await res.text());
-    return null;
-  }
-  const data = (await res.json()) as {
-    choices?: Array<{ message?: { content?: string } }>;
-  };
-  return data.choices?.[0]?.message?.content?.trim() || null;
+  return geminiChatText(SYSTEM_PROMPT, { question, metrics: snapshot }, 0.2);
 }
 
 export async function askOpsAssistant(options: {

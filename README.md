@@ -109,7 +109,7 @@ http://localhost:3000
 | `USD_TO_KRW` / `MARGIN_RATE` / `CHINA_SHIPPING_FEE_KRW` / `INTL_SHIPPING_FEE_KRW` / `CARD_FEE_RATE` / `COMPETITOR_UNDERCUT_RATE` 등 | AI 추천 판매가·PriceRule 폴백 |
 | `SMARTSTORE_*` / `COUPANG_*` | 채널 API (없으면 스텁) |
 | `CRON_SECRET` | 배치 동기화 보호 |
-| `OPENAI_API_KEY` / `OPENAI_MODEL` | Step 1+ / ① 발굴 / ② AI 상세 GPT (없으면 템플릿 폴백) |
+| `GEMINI_API_KEY` / `GEMINI_MODEL` | AI 상세·발굴 이유·운영 비서 (Gemini, 없으면 템플릿 폴백). `npm run ai:import-gemini`로 9ruTrip에서 가져오기 가능 |
 | `DISCOVER_*` / `CNY_TO_KRW` | ① 발굴 어댑터·원가 환산 (기본 스텁) |
 | `CHINA_MALL_ADAPTER` / `AUTO_ORDER_*` / `FORWARDER_ADDRESS_*` | Step 2 자동주문 파이프라인 (기본 stub, 결제 게이트) |
 | `FORWARDER_ADAPTER` 등 | Step 3 배대지 (기본 stub) |
@@ -175,7 +175,7 @@ npm run recommend:generate
 # POST /api/recommendations/:id/ignore
 ```
 
-점수는 `src/lib/recommend/score.ts` 규칙 엔진이 계산합니다. `OPENAI_API_KEY`가 있으면 이유/상세만 GPT, 없으면 템플릿 폴백.
+점수는 `src/lib/recommend/score.ts` 규칙 엔진이 계산합니다. `GEMINI_API_KEY`가 있으면 이유/상세만 Gemini, 없으면 템플릿 폴백.
 
 ## ② AI 상세페이지 제작
 
