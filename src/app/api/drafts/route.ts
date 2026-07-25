@@ -2,13 +2,17 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/db";
 import { createDraftFromUrl } from "@/lib/draft/create-from-url";
+import { activeDraftWhere } from "@/lib/draft/filters";
+import { getDefaultTenantId } from "@/lib/tenant";
 
 const createSchema = z.object({
   url: z.string().min(3),
 });
 
 export async function GET() {
+  const tenantId = await getDefaultTenantId();
   const drafts = await prisma.productDraft.findMany({
+    where: activeDraftWhere(tenantId),
     orderBy: { createdAt: "desc" },
     include: {
       sourceProduct: true,

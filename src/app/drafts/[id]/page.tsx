@@ -1,7 +1,9 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { DraftStatus } from "@/generated/prisma/client";
 import { StatusBadge } from "@/components/StatusBadge";
 import { prisma } from "@/lib/db";
+import { getDefaultTenantId } from "@/lib/tenant";
 import { DraftActions } from "./DraftActions";
 import { DraftEditForm } from "./DraftEditForm";
 
@@ -11,8 +13,13 @@ type Props = { params: Promise<{ id: string }> };
 
 export default async function DraftDetailPage({ params }: Props) {
   const { id } = await params;
-  const draft = await prisma.productDraft.findUnique({
-    where: { id },
+  const tenantId = await getDefaultTenantId();
+  const draft = await prisma.productDraft.findFirst({
+    where: {
+      id,
+      tenantId,
+      status: { not: DraftStatus.ARCHIVED },
+    },
     include: {
       sourceProduct: true,
       listings: true,

@@ -105,6 +105,24 @@ export function DraftActions({
     }
   }
 
+  async function handleDelete() {
+    if (!confirm("이 초안을 삭제할까요? 목록에서 숨겨지며 되돌릴 수 없습니다.")) {
+      return;
+    }
+    setLoading("delete");
+    setMessage(null);
+    try {
+      const res = await fetch(`/api/drafts/${id}`, { method: "DELETE" });
+      const data = (await res.json()) as { error?: string };
+      if (!res.ok) throw new Error(data.error ?? "삭제 실패");
+      router.push("/drafts");
+      router.refresh();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "삭제 실패");
+      setLoading(null);
+    }
+  }
+
   return (
     <div className="space-y-3 rounded-2xl border border-zinc-200 bg-white/90 p-5">
       <h3 className="font-semibold">워크플로 액션</h3>
@@ -147,6 +165,14 @@ export function DraftActions({
           className="rounded-full border border-zinc-300 px-4 py-2 text-sm hover:border-sky-500 disabled:opacity-50"
         >
           {loading === "sync" ? "처리 중..." : "가격·품절 동기화"}
+        </button>
+        <button
+          type="button"
+          disabled={!!loading || status === "ARCHIVED"}
+          onClick={() => void handleDelete()}
+          className="rounded-full border border-red-300 px-4 py-2 text-sm text-red-700 hover:border-red-500 hover:bg-red-50 disabled:opacity-50"
+        >
+          {loading === "delete" ? "삭제 중..." : "삭제"}
         </button>
       </div>
       {message ? <p className="text-sm text-zinc-700">{message}</p> : null}

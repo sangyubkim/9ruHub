@@ -1,11 +1,15 @@
 import Link from "next/link";
 import { StatusBadge } from "@/components/StatusBadge";
 import { prisma } from "@/lib/db";
+import { activeDraftWhere } from "@/lib/draft/filters";
+import { getDefaultTenantId } from "@/lib/tenant";
 
 export const dynamic = "force-dynamic";
 
 export default async function DraftsPage() {
+  const tenantId = await getDefaultTenantId();
   const drafts = await prisma.productDraft.findMany({
+    where: activeDraftWhere(tenantId),
     orderBy: { createdAt: "desc" },
     include: { sourceProduct: true, listings: true },
     take: 100,
