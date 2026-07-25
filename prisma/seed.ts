@@ -1,9 +1,8 @@
 import "dotenv/config";
-import { PrismaPg } from "@prisma/adapter-pg";
-import { MemberRole, PrismaClient } from "../src/generated/prisma/client";
+import { MemberRole } from "../src/generated/prisma/client";
+import { createPrismaClient } from "../src/lib/prisma-pg";
 
-const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL! });
-const prisma = new PrismaClient({ adapter });
+const prisma = createPrismaClient();
 
 async function main() {
   const tenant = await prisma.tenant.upsert({
