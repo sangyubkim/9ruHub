@@ -7,13 +7,24 @@ export const dynamic = "force-dynamic";
 
 export default async function HomePage() {
   const tenantId = await getDefaultTenantId();
-  const [total, draft, approved, published, snapshot] = await Promise.all([
-    prisma.productDraft.count({ where: { tenantId } }),
-    prisma.productDraft.count({ where: { tenantId, status: "DRAFT" } }),
-    prisma.productDraft.count({ where: { tenantId, status: "APPROVED" } }),
-    prisma.productDraft.count({ where: { tenantId, status: "PUBLISHED" } }),
+  // One groupBy + snapshot (snapshot itself is sequential) — avoids nested
+  // Promise.all storms that close Prisma local postgres connections (P1017).
+  const [statusCounts, snapshot] = await Promise.all([
+    prisma.productDraft.groupBy({
+      by: ["status"],
+      where: { tenantId },
+      _count: { _all: true },
+    }),
     buildAnalyticsSnapshot(tenantId),
   ]);
+
+  const countByStatus = Object.fromEntries(
+    statusCounts.map((row) => [row.status, row._count._all]),
+  ) as Partial<Record<string, number>>;
+  const draft = countByStatus.DRAFT ?? 0;
+  const approved = countByStatus.APPROVED ?? 0;
+  const published = countByStatus.PUBLISHED ?? 0;
+  const total = statusCounts.reduce((sum, row) => sum + row._count._all, 0);
 
   const r = snapshot.revenue;
   const draftCards = [

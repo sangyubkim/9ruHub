@@ -91,21 +91,21 @@ export async function buildAnalyticsSnapshot(
     .sort((a, b) => b.revenueKrw - a.revenueKrw)
     .slice(0, 10);
 
-  const [recommendations, openShipments, deliveredShipments] = await Promise.all([
-    prisma.aiRecommendation.findMany({
-      where: { tenantId: resolvedTenantId },
-      select: { status: true, score: true },
-    }),
-    prisma.shipment.count({
-      where: {
-        tenantId: resolvedTenantId,
-        status: { in: ["PENDING", "AT_FORWARDER", "IN_TRANSIT", "EXCEPTION"] },
-      },
-    }),
-    prisma.shipment.count({
-      where: { tenantId: resolvedTenantId, status: "DELIVERED" },
-    }),
-  ]);
+  // Serialize follow-up queries: Prisma local postgres frequently closes
+  // connections under nested concurrent load (homepage + analytics).
+  const recommendations = await prisma.aiRecommendation.findMany({
+    where: { tenantId: resolvedTenantId },
+    select: { status: true, score: true },
+  });
+  const openShipments = await prisma.shipment.count({
+    where: {
+      tenantId: resolvedTenantId,
+      status: { in: ["PENDING", "AT_FORWARDER", "IN_TRANSIT", "EXCEPTION"] },
+    },
+  });
+  const deliveredShipments = await prisma.shipment.count({
+    where: { tenantId: resolvedTenantId, status: "DELIVERED" },
+  });
   const total = recommendations.length;
   const pending = recommendations.filter((r) => r.status === "PENDING").length;
   const acceptedOrDrafted = recommendations.filter((r) =>

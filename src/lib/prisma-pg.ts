@@ -10,6 +10,9 @@ import { PrismaClient } from "../generated/prisma/client";
  * Force simple-query protocol by inlining already-mapped parameter values.
  * Values reach pg only after PrismaPg's mapArg(), so escaping here is safe
  * for Prisma-generated SQL.
+ *
+ * Prisma local also recommends a small pool (server cap ~10) with a tiny idle
+ * timeout; oversized pools + nested Promise.all storms close connections (P1017).
  */
 let simpleQueryPatched = false;
 
@@ -62,14 +65,17 @@ function enableSimpleQueryProtocol() {
   clientProto.query = function patchedQuery(this: pg.Client, ...args: unknown[]) {
     const [config, values, callback] = args;
 
+    // query(text, values[, callback]) → simple query with inlined literals
     if (typeof config === "string" && Array.isArray(values)) {
-      return originalQuery.call(
-        this,
-        inlineSqlParameters(config, values as unknown[]),
-        callback,
-      );
+      const text = inlineSqlParameters(config, values as unknown[]);
+      if (typeof callback === "function") {
+        return originalQuery.call(this, text, callback);
+      }
+      return originalQuery.call(this, text);
     }
 
+    // query({ text, values, ... }[, callback]) — drop `name` so pg never
+    // uses the extended prepared-statement protocol.
     if (
       config &&
       typeof config === "object" &&
@@ -89,7 +95,10 @@ function enableSimpleQueryProtocol() {
       if (typeof values === "function") {
         return originalQuery.call(this, next, values);
       }
-      return originalQuery.call(this, next, callback);
+      if (typeof callback === "function") {
+        return originalQuery.call(this, next, callback);
+      }
+      return originalQuery.call(this, next);
     }
 
     return originalQuery.apply(this, args);
@@ -100,6 +109,8 @@ function enableSimpleQueryProtocol() {
 // also avoid the extended prepared-statement protocol.
 enableSimpleQueryProtocol();
 
+const DEFAULT_POOL_MAX = 5;
+
 export function createPrismaClient(connectionString = process.env.DATABASE_URL) {
   if (!connectionString) {
     throw new Error("DATABASE_URL이 설정되지 않았습니다.");
@@ -107,11 +118,28 @@ export function createPrismaClient(connectionString = process.env.DATABASE_URL) 
 
   enableSimpleQueryProtocol();
 
-  const adapter = new PrismaPg({
+  const pool = new pg.Pool({
     connectionString,
-    max: 10,
-    idleTimeoutMillis: 10_000,
-    connectionTimeoutMillis: 5_000,
+    max: DEFAULT_POOL_MAX,
+    // Prisma local: idle timeout should be the smallest positive value.
+    idleTimeoutMillis: 1,
+    // 0 = no client-side connect timeout (matches prisma dev URL advice).
+    connectionTimeoutMillis: 0,
+    allowExitOnIdle: true,
+  });
+
+  pool.on("error", (err) => {
+    console.error("[prisma-pg] idle client error:", err.message);
+  });
+
+  const adapter = new PrismaPg(pool, {
+    disposeExternalPool: true,
+    onPoolError: (err) => {
+      console.error("[prisma-pg] pool error:", err.message);
+    },
+    onConnectionError: (err) => {
+      console.error("[prisma-pg] connection error:", err.message);
+    },
   });
 
   return new PrismaClient({ adapter });
