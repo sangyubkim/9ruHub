@@ -11,7 +11,7 @@ Amazon US 소싱 → 초안 → 채널 등록/동기화에 더해, **SaaS 멀티
 | 0 | SaaS DB/ERD (tenants, products, orders, shipments, AI) | **완료** |
 | 1 | 규칙 추천 + GPT 이유/상세 + 원클릭 초안 | **완료** |
 | 2 | 주문 관리 + 중국몰 자동주문 어댑터(스텁) | **완료** |
-| 3 | 배대지 + 송장 자동등록 어댑터 | 진행 예정 |
+| 3 | 배대지 + 송장 자동등록 어댑터 | **완료** |
 | 4 | AI 수익분석 대시보드 + 운영 비서 | 진행 예정 |
 | 5 | SaaS 빌링 / 멀티유저 고도화 | 미착수 |
 
@@ -102,7 +102,9 @@ http://localhost:3000
 | `USD_TO_KRW` 등 | 가격 규칙 폴백 |
 | `SMARTSTORE_*` / `COUPANG_*` | 채널 API (없으면 스텁) |
 | `CRON_SECRET` | 배치 동기화 보호 |
-| `OPENAI_API_KEY` | Step 1+ GPT (없으면 템플릿 폴백) |
+| `OPENAI_API_KEY` / `OPENAI_MODEL` | Step 1+ GPT (없으면 템플릿 폴백) |
+| `CHINA_MALL_ADAPTER` 등 | Step 2 중국몰 (기본 stub) |
+| `FORWARDER_ADAPTER` 등 | Step 3 배대지 (기본 stub) |
 
 ## 동기화 스케줄러
 
@@ -137,6 +139,17 @@ npm run recommend:generate
 
 `CHINA_MALL_ADAPTER=stub` (기본). 공식 API 연동 전까지 실결제 없이 `purchaseRef`만 기록합니다.
 
+## Step 3 — 배대지 / 송장
+
+```bash
+# UI: /shipments
+# POST /api/shipments { "orderId": "..." }
+# POST /api/shipments/:id/track
+# POST /api/shipments/:id/invoice { "localCarrier":"CJ", "localTrackingNo":"..." }
+```
+
+`FORWARDER_ADAPTER=stub` 기본. 채널 송장 등록도 스텁이며 live 훅 자리만 열어 둡니다.
+
 ## 주요 API (현재)
 
 - `POST /api/drafts` `{ "url": "https://www.amazon.com/dp/ASIN" }`
@@ -149,6 +162,9 @@ npm run recommend:generate
 - `GET|POST /api/orders`
 - `GET|PATCH /api/orders/:id`
 - `POST /api/orders/:id/purchase`
+- `GET|POST /api/shipments`
+- `POST /api/shipments/:id/track|invoice`
+
 - `GET /api/channels/status`
 - `GET|POST /api/cron/sync`
 - `GET /api/templates/excel`

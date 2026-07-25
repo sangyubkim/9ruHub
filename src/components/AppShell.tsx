@@ -4,6 +4,7 @@ const links = [
   { href: "/", label: "대시보드" },
   { href: "/recommendations", label: "AI 추천" },
   { href: "/orders", label: "주문" },
+  { href: "/shipments", label: "물류" },
   { href: "/drafts", label: "초안 목록" },
   { href: "/drafts/new", label: "URL 등록" },
   { href: "/drafts/import", label: "엑셀 대량" },

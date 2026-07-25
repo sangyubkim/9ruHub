@@ -131,7 +131,33 @@ async function main() {
     });
   }
 
-  console.log("Seed complete: demo tenant + owner + PriceRule (+ sample rec/order)");
+  // Step 3 sample shipment for seed order if missing
+  const seedOrder = await prisma.order.findFirst({
+    where: { tenantId: tenant.id, externalOrderId: "SEED-ORDER-001" },
+    include: { shipment: true },
+  });
+  if (seedOrder && !seedOrder.shipment) {
+    await prisma.shipment.create({
+      data: {
+        tenantId: tenant.id,
+        orderId: seedOrder.id,
+        status: "AT_FORWARDER",
+        forwarderCode: "stub-forwarder",
+        forwarderTrackingNo: `FWD-SEED-${Date.now()}`,
+        shippingCostKrw: 8000,
+        events: [
+          {
+            at: new Date().toISOString(),
+            description: "시드 배대지 입고",
+          },
+        ],
+      },
+    });
+  }
+
+  console.log(
+    "Seed complete: demo tenant + owner + PriceRule (+ sample rec/order/shipment)",
+  );
   console.log(`  tenantId=${tenant.id}`);
 }
 
