@@ -39,3 +39,9 @@ export function is1688OfferUrl(input: string): boolean {
 export function to1688OfferUrl(offerId: string): string {
   return `https://detail.1688.com/offer/${offerId}.html`;
 }
+
+/** 스텁이 만들던 가짜 detail URL (offer/1688-xxx) — 실상품이 아니라 404 */
+export function isFake1688StubDetailUrl(input: string | null | undefined): boolean {
+  if (!input) return false;
+  return /detail\.1688\.com\/offer\/(?:1688-|stub-)/i.test(input);
+}

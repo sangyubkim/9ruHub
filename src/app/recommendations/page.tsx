@@ -1,5 +1,10 @@
 import Link from "next/link";
 import { prisma } from "@/lib/db";
+import { build1688SearchUrl } from "@/lib/discover/supply/search-1688";
+import {
+  is1688OfferUrl,
+  isFake1688StubDetailUrl,
+} from "@/lib/discover/supply/parse-1688-url";
 import {
   activeRecommendationWhere,
   ignoredRecommendationWhere,
@@ -140,6 +145,24 @@ export default async function RecommendationsPage({ searchParams }: PageProps) {
               item.candidate?.sellPrice ??
               featureNumber(item.scoreBreakdown, "sellPriceKrw");
 
+            const candidateUrl =
+              item.candidate?.supplyUrl ?? item.sourceUrl ?? null;
+            const realOfferUrl =
+              candidateUrl &&
+              is1688OfferUrl(candidateUrl) &&
+              !isFake1688StubDetailUrl(candidateUrl)
+                ? candidateUrl
+                : null;
+            const isStubCard = Boolean(item.candidate?.isStub);
+            const searchHref =
+              item.candidate?.keyword != null
+                ? build1688SearchUrl(item.candidate.keyword)
+                : candidateUrl &&
+                    !isFake1688StubDetailUrl(candidateUrl) &&
+                    candidateUrl.includes("1688.com")
+                  ? candidateUrl
+                  : null;
+
             return (
               <article
                 key={item.id}
@@ -152,7 +175,7 @@ export default async function RecommendationsPage({ searchParams }: PageProps) {
                       {item.candidate
                         ? ` · ${item.candidate.sourceDemandMall}↔${item.candidate.sourceSupplyMall}`
                         : ""}
-                      {item.candidate?.isStub ? " · STUB" : ""}
+                      {isStubCard ? " · STUB" : ""}
                       <FreshScanBadge recommendationId={item.id} />
                     </p>
                     <h3 className="mt-1 text-lg font-semibold">{item.title}</h3>
@@ -176,7 +199,28 @@ export default async function RecommendationsPage({ searchParams }: PageProps) {
                           : null}
                       </p>
                     )}
-                    {item.sourceUrl ? (
+                    {realOfferUrl ? (
+                      <a
+                        href={realOfferUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="mt-2 inline-block text-xs text-sky-800 underline"
+                      >
+                        원본 보기
+                      </a>
+                    ) : searchHref ? (
+                      <a
+                        href={searchHref}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="mt-2 inline-block text-xs text-sky-800 underline"
+                      >
+                        {isStubCard
+                          ? "1688에서 검색 (스텁·실상품 아님)"
+                          : "1688에서 검색"}
+                      </a>
+                    ) : item.sourceUrl &&
+                      !isFake1688StubDetailUrl(item.sourceUrl) ? (
                       <a
                         href={item.sourceUrl}
                         target="_blank"
@@ -204,11 +248,7 @@ export default async function RecommendationsPage({ searchParams }: PageProps) {
                 item.status !== "CONVERTED" ? (
                   <Attach1688CostForm
                     recommendationId={item.id}
-                    initialUrl={
-                      item.sourceUrl?.includes("1688.com")
-                        ? item.sourceUrl
-                        : item.candidate?.supplyUrl
-                    }
+                    initialUrl={realOfferUrl ?? undefined}
                   />
                 ) : null}
                 <RecommendActions
