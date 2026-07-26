@@ -24,9 +24,13 @@ async function handle(request: Request) {
     const expandRelated =
       (process.env.DISCOVER_WEEKLY_EXPAND_RELATED ?? "false").toLowerCase() ===
       "true";
+    const envMode = process.env.DISCOVER_WEEKLY_SUPPLY_MODE?.trim();
+    const supplyMode =
+      envMode === "legacy_1688" ? ("legacy_1688" as const) : ("demand_only" as const);
     const result = await runWeeklyDiscover({
       category: "all",
       expandRelated,
+      supplyMode,
       supplyLimit: Number(process.env.DISCOVER_WEEKLY_SUPPLY_LIMIT ?? 1),
       minScore: Number(process.env.DISCOVER_WEEKLY_MIN_SCORE ?? 40),
       delayMs: Number(process.env.DISCOVER_WEEKLY_DELAY_MS ?? 300),
@@ -34,8 +38,10 @@ async function handle(request: Request) {
 
     return NextResponse.json({
       ok: true,
+      supplyMode: result.supplyMode,
       scanned: result.scanned,
       createdTotal: result.createdTotal,
+      awaitingAmazonCount: result.awaitingAmazonCount,
       relatedCount: result.relatedCount,
       top: result.top.slice(0, 10),
     });

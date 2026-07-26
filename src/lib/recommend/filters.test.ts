@@ -2,12 +2,12 @@ import { describe, expect, it } from "vitest";
 import {
   RecommendationStatus,
   SourceMall,
-  SupplyMall,
 } from "@/generated/prisma/client";
 import {
   activeRecommendationWhere,
   amazonFacingRecommendationWhere,
   ignoredRecommendationWhere,
+  needsAmazonUrlExceptionWhere,
 } from "@/lib/recommend/filters";
 
 describe("recommendation filters", () => {
@@ -25,7 +25,21 @@ describe("recommendation filters", () => {
     });
   });
 
-  it("Amazon-facing where는 1688 stub·도매 오퍼를 제외한다", () => {
+  it("needsAmazonUrl 예외는 DEMAND_WATCH·features.needsAmazonUrl을 포함한다", () => {
+    expect(needsAmazonUrlExceptionWhere()).toEqual({
+      OR: [
+        { reasonCode: "DEMAND_WATCH" },
+        {
+          scoreBreakdown: {
+            path: ["features", "needsAmazonUrl"],
+            equals: true,
+          },
+        },
+      ],
+    });
+  });
+
+  it("Amazon-facing where는 stub 제외하되 needsAmazonUrl 카드를 OR로 포함한다", () => {
     const where = amazonFacingRecommendationWhere("tenant-1", false);
     expect(where).toMatchObject({
       AND: [
@@ -34,21 +48,23 @@ describe("recommendation filters", () => {
           status: { not: RecommendationStatus.IGNORED },
         },
         {
-          NOT: {
-            OR: expect.arrayContaining([
-              {
-                candidate: {
-                  is: { sourceSupplyMall: SupplyMall.MALL_1688 },
-                },
+          OR: [
+            needsAmazonUrlExceptionWhere(),
+            {
+              NOT: {
+                OR: expect.arrayContaining([
+                  { candidate: { is: { isStub: true } } },
+                  { title: { contains: "도매 오퍼" } },
+                  { sourceUrl: { contains: "1688.com" } },
+                  {
+                    product: {
+                      is: { sourceMall: { not: SourceMall.AMAZON_US } },
+                    },
+                  },
+                ]),
               },
-              { title: { contains: "도매 오퍼" } },
-              {
-                product: {
-                  is: { sourceMall: { not: SourceMall.AMAZON_US } },
-                },
-              },
-            ]),
-          },
+            },
+          ],
         },
       ],
     });

@@ -3,12 +3,20 @@ import {
   listSeedCategories,
   type DiscoverSeedCategory,
 } from "@/lib/discover/seed-keywords";
-import { runWeeklyDiscover } from "@/lib/discover/weekly-scan";
+import {
+  runWeeklyDiscover,
+  type WeeklySupplyMode,
+} from "@/lib/discover/weekly-scan";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
 
 const CATEGORIES = new Set<string>(["all", ...listSeedCategories()]);
+
+function parseSupplyMode(raw: unknown): WeeklySupplyMode | undefined {
+  if (raw === "legacy_1688" || raw === "demand_only") return raw;
+  return undefined;
+}
 
 export async function GET() {
   return NextResponse.json({
@@ -19,6 +27,7 @@ export async function GET() {
       minScore: 40,
       supplyLimit: 1,
       seedLimit: null,
+      supplyMode: "demand_only",
     },
   });
 }
@@ -35,6 +44,7 @@ export async function POST(request: Request) {
       minScore?: number;
       delayMs?: number;
       replacePending?: boolean;
+      supplyMode?: string;
     };
 
     const categoryRaw = (body.category ?? "all").toLowerCase();
@@ -56,6 +66,7 @@ export async function POST(request: Request) {
       supplyLimit: body.supplyLimit,
       minScore: body.minScore,
       delayMs: body.delayMs,
+      supplyMode: parseSupplyMode(body.supplyMode),
       // 기본: 이번 스캔 결과만 남기고 이전 PENDING 발굴 추천 정리
       replacePending: body.replacePending !== false,
     });

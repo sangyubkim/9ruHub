@@ -1,3 +1,4 @@
+import { discoverDemandOnlyByKeyword } from "@/lib/discover/demand-only";
 import { discoverByKeyword } from "@/lib/discover/engine";
 import { expandRelatedKeywords } from "@/lib/discover/expand-keywords";
 import {
@@ -8,6 +9,8 @@ import {
 } from "@/lib/discover/seed-keywords";
 import { cleanupRecommendations } from "@/lib/recommend/cleanup";
 import { getDefaultTenantId } from "@/lib/tenant";
+
+export type WeeklySupplyMode = "demand_only" | "legacy_1688";
 
 export type WeeklyDiscoverOptions = {
   tenantId?: string;
@@ -23,6 +26,11 @@ export type WeeklyDiscoverOptions = {
   minScore?: number;
   /** 키워드 사이 대기(API 한도) */
   delayMs?: number;
+  /**
+   * demand_only(기본): 네이버 수요 → Amazon URL 대기 카드
+   * legacy_1688: 기존 네이버↔1688 공급 경로
+   */
+  supplyMode?: WeeklySupplyMode;
   /**
    * true면 이번 스캔에 없는 기존 PENDING 발굴 추천을 무시해 목록을 교체.
    * 기본 true (누적 방지)
@@ -53,6 +61,11 @@ export async function runWeeklyDiscover(options?: WeeklyDiscoverOptions) {
   const minScore = options?.minScore ?? 40;
   const delayMs = options?.delayMs ?? 300;
   const replacePending = options?.replacePending ?? true;
+  const envMode = process.env.DISCOVER_WEEKLY_SUPPLY_MODE?.trim();
+  const supplyMode: WeeklySupplyMode =
+    options?.supplyMode ??
+    (envMode === "legacy_1688" ? "legacy_1688" : "demand_only");
+  const demandOnly = supplyMode !== "legacy_1688";
 
   const seeds = getSeedKeywords({
     category,
@@ -92,6 +105,7 @@ export async function runWeeklyDiscover(options?: WeeklyDiscoverOptions) {
   const results: WeeklyDiscoverKeywordResult[] = [];
   let createdTotal = 0;
   let stubCount = 0;
+  let awaitingAmazonCount = 0;
 
   for (let i = 0; i < deduped.length; i += 1) {
     const keyword = deduped[i]!;
@@ -99,14 +113,19 @@ export async function runWeeklyDiscover(options?: WeeklyDiscoverOptions) {
     const source = sourceByKeyword.get(norm) ?? "seed";
 
     try {
-      const result = await discoverByKeyword(keyword, {
-        tenantId,
-        supplyLimit,
-        minScore,
-      });
+      const result = demandOnly
+        ? await discoverDemandOnlyByKeyword(keyword, { tenantId, minScore })
+        : await discoverByKeyword(keyword, {
+            tenantId,
+            supplyLimit,
+            minScore,
+          });
       const top = result.items[0];
       createdTotal += result.created;
       if (result.isStub) stubCount += 1;
+      if ("awaitingAmazon" in result && result.awaitingAmazon && result.created > 0) {
+        awaitingAmazonCount += 1;
+      }
       results.push({
         keyword,
         source,
@@ -161,11 +180,13 @@ export async function runWeeklyDiscover(options?: WeeklyDiscoverOptions) {
     category,
     expandRelated,
     replacePending,
+    supplyMode: demandOnly ? "demand_only" : "legacy_1688",
     seedCount: seedKeywordList.length,
     relatedCount: related.length,
     scanned: deduped.length,
     createdTotal,
     stubCount,
+    awaitingAmazonCount,
     addedCount: added.length,
     failedCount: failed.length,
     noHitCount: noHit.length,

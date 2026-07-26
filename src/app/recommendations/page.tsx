@@ -13,6 +13,7 @@ import {
 } from "@/lib/recommend/filters";
 import { getDefaultTenantId } from "@/lib/tenant";
 import { Attach1688CostForm } from "@/app/recommendations/Attach1688CostForm";
+import { AttachAmazonUrlForm } from "@/app/recommendations/AttachAmazonUrlForm";
 import { DiscoverKeywordForm } from "@/app/recommendations/DiscoverKeywordForm";
 import { FreshScanBadge } from "@/app/recommendations/FreshScanBadge";
 import { RecommendActions } from "@/app/recommendations/RecommendActions";
@@ -202,9 +203,10 @@ export default async function RecommendationsPage({ searchParams }: PageProps) {
         </h2>
         <p className="mt-2 text-sm text-zinc-600">
           주력은 Amazon US URL 소싱입니다. 상품 링크를 넣으면 원가·몰테일
-          국제배송·판매가를 추천합니다.
+          국제배송·판매가를 추천합니다. 주간 발굴은 네이버 수요 후보를 만들고,
+          운영자가 Amazon URL을 붙여 확정합니다.
           {chinaUi
-            ? " 네이버↔1688 발굴은 아래 레거시 섹션에서 사용할 수 있습니다."
+            ? " 네이버↔1688 레거시 폼은 아래 섹션에 있습니다."
             : " 중국(1688) UI는 기본 비활성입니다."}
         </p>
       </section>
@@ -219,12 +221,21 @@ export default async function RecommendationsPage({ searchParams }: PageProps) {
         <RecommendGenerateForm />
       </section>
 
+      <section className="space-y-2">
+        <h3 className="text-sm font-semibold text-zinc-700">
+          이번 주 네이버 수요 후보
+        </h3>
+        <p className="text-xs text-zinc-500">
+          네이버 검색량·경쟁으로 후보를 만든 뒤, 카드에 Amazon URL을 붙이세요.
+        </p>
+        <WeeklyDiscoverForm />
+      </section>
+
       {chinaUi ? (
         <section className="space-y-4 rounded-2xl border border-dashed border-zinc-300 bg-zinc-50/50 p-4">
           <h3 className="text-sm font-semibold text-zinc-600">
             레거시 · 네이버↔1688 발굴
           </h3>
-          <WeeklyDiscoverForm />
           <DiscoverKeywordForm />
         </section>
       ) : null}
@@ -258,7 +269,7 @@ export default async function RecommendationsPage({ searchParams }: PageProps) {
           <p className="rounded-2xl border border-dashed border-zinc-300 bg-white/60 p-8 text-sm text-zinc-500">
             {showIgnored
               ? "무시된 추천이 없습니다."
-              : "추천이 없습니다. Amazon URL을 넣거나 기존 상품 스캔을 사용하세요."}
+              : "추천이 없습니다. Amazon URL을 넣거나 「이번 주 추천 새로고침」으로 수요 후보를 만드세요."}
           </p>
         ) : (
           items.map((item) => {
@@ -313,6 +324,9 @@ export default async function RecommendationsPage({ searchParams }: PageProps) {
               item.scoreBreakdown,
               "naverKeyword",
             );
+            const needsAmazonUrl =
+              item.reasonCode === "DEMAND_WATCH" ||
+              featureBool(item.scoreBreakdown, "needsAmazonUrl");
 
             const candidateUrl =
               item.candidate?.supplyUrl ?? item.sourceUrl ?? null;
@@ -356,6 +370,11 @@ export default async function RecommendationsPage({ searchParams }: PageProps) {
                           {item.candidate.sourceDemandMall}↔
                           {item.candidate.sourceSupplyMall}
                         </p>
+                      ) : null}
+                      {needsAmazonUrl ? (
+                        <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-medium text-amber-900">
+                          Amazon URL 필요
+                        </span>
                       ) : null}
                       <FreshScanBadge recommendationId={item.id} />
                     </div>
@@ -439,7 +458,18 @@ export default async function RecommendationsPage({ searchParams }: PageProps) {
                     ) : null}
                   </div>
                 </div>
+                {needsAmazonUrl &&
+                item.status !== "IGNORED" &&
+                item.status !== "CONVERTED" ? (
+                  <AttachAmazonUrlForm
+                    recommendationId={item.id}
+                    keywordHint={
+                      item.candidate?.keyword ?? naverKeyword ?? undefined
+                    }
+                  />
+                ) : null}
                 {chinaUi &&
+                !needsAmazonUrl &&
                 item.candidateId &&
                 item.status !== "IGNORED" &&
                 item.status !== "CONVERTED" ? (

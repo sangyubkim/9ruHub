@@ -17,7 +17,7 @@
 | 영역 | 상태 | 비고 |
 |------|------|------|
 | 네이버 수요 (오픈API 쇼핑 + 검색광고) | **Live** | `NAVER_CLIENT_*`, `NAVER_SEARCHAD_*` |
-| 주간 자동 발굴 (시드 키워드 → 일괄 스캔) | **Live** | `/recommendations` 「이번 주 추천 새로고침」 |
+| 주간 자동 발굴 (네이버 수요 → Amazon URL 대기) | **Live** | `/recommendations` 「이번 주 추천 새로고침」 · `supplyMode=demand_only` |
 | 연관 키워드 확장 | **Live(선택)** | 검색광고 연관어, 체크 시 |
 | **Amazon US 소싱·초안·추천** | **주력 · 동작** | URL/ASIN → **PA-API 우선** · HTML 폴백 · 차단 시 FALLBACK |
 | Amazon PA-API 5.0 | **연동 완료** | `AMAZON_PAAPI_*` 키 필요 · `npm run smoke:amazon-paapi` |
@@ -54,22 +54,24 @@
 16. **Amazon-first 전환** — 추천 UI 주력을 Amazon URL로, 1688 UI 기본 숨김
 17. **Amazon URL 추천 강화** — 몰테일 배송·네이버 시세·시장성 · 폴백($29.99) FALLBACK 배지
 18. **Amazon PA-API 5.0** — GetItems(SigV4) 공식 조회 · HTML/폴백 후순위
+19. **주간 추천 Amazon-first** — 네이버 수요 카드 → 운영자 Amazon URL 붙이기 · PA-API SearchItems는 승인 후
 
 ### 다음 방향 (우선순위)
 
-1. PA-API 키 발급·스모크 검증 · 검색(SearchItems) 확장  
-2. 채널 API·등록 live · SaaS  
-3. 1688은 보류(해외 가입/제재) |
+1. Associates/PA-API 승인 후 SearchItems로 ASIN 자동 제안  
+2. PA-API 키 발급·스모크 검증  
+3. 채널 API·등록 live · SaaS  
+4. 1688은 보류(해외 가입/제재) |
 
 ### 목표 스펙 vs 지금 (발굴)
 
-목표: Amazon US 상품을 중심으로 원가·배송·판매가를 잡고, 네이버 수요로 검증한다.
+목표: 네이버가 “이번 주 수요”를 고르고, 운영자가 Amazon URL·원가를 붙여 확정한다.
 
 | 목표 | 지금 |
 |------|------|
 | Amazon URL → 추천·초안 | **동작** |
-| 키워드 자동 발굴 | 네이버↔1688 경로 있음 · UI 기본 숨김 |
-| 경쟁·마진·배송 | 몰테일 US + 네이버 시세(시장성) · 리뷰 중성값 |
+| 주간 키워드 발굴 | **수요 전용** (`demand_only`) · Amazon URL 수동 부착 |
+| 경쟁·마진·배송 | 몰테일 US + 네이버 시세(시장성) · URL 부착 후 재산정 |
 
 ---
 
@@ -184,7 +186,7 @@ http://localhost:3000
 | `NAVER_CLIENT_ID` / `NAVER_CLIENT_SECRET` | 네이버 오픈API 쇼핑검색 |
 | `NAVER_SEARCHAD_ACCESS_KEY` / `SECRET_KEY` / `CUSTOMER_ID` | 검색광고 월간 검색량·연관어 |
 | `DISCOVER_NAVER_MODE` | `auto`(키 있으면 live) / `stub` / `live` |
-| `DISCOVER_*` / `CNY_TO_KRW` / `DISCOVER_WEEKLY_*` | 발굴·주간 스캔 |
+| `DISCOVER_*` / `CNY_TO_KRW` / `DISCOVER_WEEKLY_*` | 발굴·주간 스캔 (`DISCOVER_WEEKLY_SUPPLY_MODE=demand_only` 기본) |
 | `CHINA_MALL_ADAPTER` / `AUTO_ORDER_*` / `FORWARDER_*` | 자동주문·배대지 (기본 stub) |
 
 ## 동기화·배치
@@ -202,17 +204,23 @@ npm run sync:scheduler
 
 ### UI (`/recommendations`)
 
-1. **Amazon URL / 기존 스캔** — 주력. `amazon.com/dp/...` → 추천 카드  
-2. **초안** — `/drafts/new` 동일 Amazon URL · 몰테일 US 배송  
+1. **Amazon URL / 기존 스캔** — 직접 URL·ASIN → 추천 카드  
+2. **이번 주 네이버 수요 후보** — 시드 스캔 → 「Amazon URL 필요」카드 → URL(+USD) 붙이기  
 3. **정리** — 무시 / 삭제 / 일괄 정리  
 4. **레거시 네이버↔1688** — `NEXT_PUBLIC_SHOW_1688_UI=true` 일 때만 표시  
-   (시드 스캔 · 키워드 발굴 · 1688 원가 붙이기)
+
+### 주간 루틴 (운영)
+
+1. 「이번 주 추천 새로고침」실행  
+2. 상위 수요 카드 확인 (검색량·경쟁·시세)  
+3. Amazon.com에서 상품 찾아 URL 붙이기 (실가는 수동/PA-API)  
+4. 시장성 SELL이면 원클릭 초안  
 
 ### CLI
 
 ```bash
-npm run discover:keyword -- "무선선풍기"
-npm run discover:weekly -- seasonal_home --limit=2
+npm run discover:keyword -- "무선선풍기"   # 레거시 1688 경로
+npm run discover:weekly -- seasonal_home --limit=2   # demand_only 기본
 npm run discover:weekly -- all --expand
 npx tsx scripts/smoke-naver-demand.ts 무선선풍기
 npm run smoke:discover
@@ -220,7 +228,7 @@ npm run smoke:discover
 npm run smoke:1688-search -- 无线风扇
 ```
 
-권장 운영: **Amazon.com에서 상품 고르기 → URL을 `/recommendations` 또는 `/drafts/new`에 붙이기**.  
+권장 운영: **주간 수요 카드 → Amazon URL 부착**, 또는 직접 URL을 `/recommendations`·`/drafts/new`에 붙이기.  
 
 **Amazon PA-API (로봇 차단 회피):** Associates 가입·API 승인 후 `.env`에 키 설정.
 
@@ -242,7 +250,8 @@ npm run smoke:amazon-paapi -- B0CQXG17RL
 
 ```text
 POST /api/discover              { "keyword": "무선선풍기" }
-POST /api/discover/weekly       { "category": "all", "expandRelated": true, "replacePending": true }
+POST /api/discover/weekly       { "category": "all", "expandRelated": true, "supplyMode": "demand_only", "replacePending": true }
+POST /api/recommendations/:id/amazon-url   { "url": "https://www.amazon.com/dp/...", "costUsd": 19.99 }
 POST /api/recommendations/:id/supply-url   { "supplyUrl": "https://detail.1688.com/offer/....html", "costPriceCny": 23 }
 POST /api/recommendations/:id/accept|ignore|unignore|delete
 POST /api/recommendations/cleanup   { "mode": "pending"|"pending_stub"|"keep_top"|"purge_ignored" }
@@ -250,7 +259,9 @@ GET|POST /api/cron/discover-weekly
 ```
 
 시드 키워드: `src/lib/discover/seed-keywords.ts`  
+수요 전용 발굴: `src/lib/discover/demand-only.ts`  
 네이버 live: `src/lib/discover/demand/naver-live.ts`  
+Amazon URL 부착: `src/lib/discover/apply-amazon-url.ts`  
 1688 URL: `src/lib/discover/supply/fetch-1688-offer.ts`
 
 ### 가격이 두 갈래인 이유

@@ -18,7 +18,7 @@ async function main() {
     category,
     expandRelated: expand,
     seedLimit: Number.isFinite(seedLimit) ? seedLimit : undefined,
-    supplyLimit: 1,
+    supplyMode: "demand_only",
     minScore: 40,
     delayMs: 200,
   });
@@ -27,6 +27,7 @@ async function main() {
     JSON.stringify(
       {
         category: result.category,
+        supplyMode: result.supplyMode,
         scanned: result.scanned,
         seedCount: result.seedCount,
         relatedCount: result.relatedCount,
@@ -34,6 +35,7 @@ async function main() {
         addedCount: result.addedCount,
         noHitCount: result.noHitCount,
         failedCount: result.failedCount,
+        awaitingAmazonCount: result.awaitingAmazonCount,
         stubCount: result.stubCount,
         addedKeywords: result.added.map((r) => r.keyword),
         top: result.top.slice(0, 8),

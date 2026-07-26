@@ -25,6 +25,8 @@ type ScanSummary = {
   failedCount: number;
   noHitCount: number;
   stubCount: number;
+  awaitingAmazonCount?: number;
+  supplyMode?: string;
   replacedIgnored?: number;
   minScore: number;
   results: ScanRow[];
@@ -90,7 +92,7 @@ export function WeeklyDiscoverForm() {
         body: JSON.stringify({
           category,
           expandRelated,
-          supplyLimit: 1,
+          supplyMode: "demand_only",
           minScore: 40,
         }),
       });
@@ -108,6 +110,8 @@ export function WeeklyDiscoverForm() {
         failedCount: data.failedCount ?? 0,
         noHitCount: data.noHitCount ?? 0,
         stubCount: data.stubCount ?? 0,
+        awaitingAmazonCount: data.awaitingAmazonCount ?? 0,
+        supplyMode: data.supplyMode ?? "demand_only",
         replacedIgnored: data.replacedIgnored ?? 0,
         minScore: data.minScore ?? 40,
         results: data.results ?? [],
@@ -140,11 +144,12 @@ export function WeeklyDiscoverForm() {
   return (
     <section className="rounded-2xl border border-emerald-200 bg-emerald-50/50 p-5">
       <h3 className="text-sm font-semibold text-emerald-950">
-        이번 주 자동 발굴
+        이번 주 추천 새로고침
       </h3>
       <p className="mt-1 text-xs text-emerald-950/70">
-        시드 키워드를 일괄 스캔합니다. 실행 후 검색·반영 목록이 아래에 남고,
-        이전 대기(PENDING) 발굴 추천은 자동 정리됩니다. (초안 연결분은 유지)
+        시드 키워드의 네이버 수요만 스캔합니다. 추천 카드에 「Amazon URL
+        필요」가 붙으면 Amazon.com에서 상품을 찾아 URL을 붙이세요. 이전
+        대기(PENDING) 발굴 추천은 자동 정리됩니다.
       </p>
 
       <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
@@ -328,9 +333,11 @@ export function WeeklyDiscoverForm() {
             {summary.replacedIgnored
               ? ` · 이전 대기 추천 ${summary.replacedIgnored}건 정리됨`
               : ""}
-            {summary.stubCount > 0
-              ? ` · 공급 스텁 ${summary.stubCount}키워드`
-              : ""}
+            {(summary.awaitingAmazonCount ?? 0) > 0
+              ? ` · Amazon URL 대기 ${summary.awaitingAmazonCount}키워드`
+              : summary.stubCount > 0
+                ? ` · 공급 스텁 ${summary.stubCount}키워드`
+                : ""}
           </p>
         </div>
       ) : (

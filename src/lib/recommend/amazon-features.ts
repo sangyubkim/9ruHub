@@ -13,6 +13,8 @@ export type AmazonScoreFeatureExtras = {
   naverKeyword?: string | null;
   targetMarginRate?: number | null;
   shipping?: ShippingDetail | null;
+  /** 주간 수요 카드에 Amazon URL을 붙인 뒤 false */
+  needsAmazonUrl?: boolean;
 };
 
 /** UI(RecommendEconomics)가 읽는 features 형태로 Amazon 점수 breakdown 저장 */
@@ -41,6 +43,8 @@ export function withAmazonScoreFeatures(
       isFallback: Boolean(extras?.isFallback),
       naverKeyword: extras?.naverKeyword ?? null,
       shipping: extras?.shipping ?? null,
+      needsAmazonUrl: extras?.needsAmazonUrl === true,
+      awaitingAmazon: extras?.needsAmazonUrl === true,
     },
     marketVerdict: extras?.marketVerdict ?? null,
   };
