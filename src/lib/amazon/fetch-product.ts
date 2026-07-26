@@ -3,38 +3,23 @@ import {
   AMAZON_FALLBACK_PRICE_USD,
   amazonFallbackTitle,
 } from "@/lib/amazon/fallback";
+import { hasAmazonPaapiCredentials } from "@/lib/amazon/paapi/config";
+import { fetchAmazonUsProductViaPaapi } from "@/lib/amazon/paapi/get-items";
 import {
   extractAmazonWeightFromDom,
   extractAmazonWeightGrams,
 } from "@/lib/product/parse-weight";
+import type { FetchedOption, FetchedProduct } from "@/lib/amazon/types";
 import { extractAsin, toAmazonUsUrl } from "./parse-url";
 
-export type FetchedOption = {
-  name: string;
-  values: string[];
-};
-
-export type FetchedProduct = {
-  asin: string;
-  sourceUrl: string;
-  title: string;
-  brand: string | null;
-  currency: string;
-  sourcePrice: number;
-  inStock: boolean;
-  images: string[];
-  options: FetchedOption[];
-  /** 파싱된 무게(g). Shipping Weight 우선 */
-  weightGrams?: number | null;
-  isFallback: boolean;
-  raw?: Record<string, unknown>;
-};
+export type { FetchedOption, FetchedProduct } from "@/lib/amazon/types";
 
 export type AmazonFallbackReason =
   | "amazon_robot_block"
   | "http_error"
   | "parse_missing_title_or_price"
-  | "fetch_error";
+  | "fetch_error"
+  | "paapi_error";
 
 function fallbackProduct(
   asin: string,
@@ -67,13 +52,15 @@ export function amazonFallbackReasonMessage(
 ): string {
   switch (reason) {
     case "amazon_robot_block":
-      return "Amazon이 서버 요청을 로봇으로 차단했습니다(브라우저에서는 보이지만 앱 fetch는 막힘).";
+      return "Amazon이 서버 HTML 요청을 로봇으로 차단했습니다. PA-API 키를 설정하면 공식 API로 조회합니다.";
     case "http_error":
       return "Amazon HTTP 응답 오류로 상품 페이지를 받지 못했습니다.";
     case "parse_missing_title_or_price":
       return "페이지는 받았지만 제목/가격 HTML을 파싱하지 못했습니다.";
     case "fetch_error":
       return "Amazon 요청 중 네트워크/타임아웃 오류가 났습니다.";
+    case "paapi_error":
+      return "Amazon PA-API 조회에 실패했습니다. 키·파트너 태그·Associates 승인을 확인하세요.";
     default:
       return "Amazon에서 실가격을 가져오지 못했습니다.";
   }
@@ -132,18 +119,10 @@ export function extractAmazonPriceFromHtml(
   return null;
 }
 
-/**
- * Amazon US 상품 페이지를 수집한다.
- * 차단/파싱 실패 시 ASIN 기반 폴백 초안을 반환해 워크플로가 멈추지 않게 한다.
- */
-export async function fetchAmazonUsProduct(inputUrl: string): Promise<FetchedProduct> {
-  const asin = extractAsin(inputUrl);
-  if (!asin) {
-    throw new Error("유효한 Amazon US URL 또는 ASIN이 아닙니다.");
-  }
-
-  const sourceUrl = toAmazonUsUrl(asin);
-
+async function fetchAmazonUsProductViaHtml(
+  asin: string,
+  sourceUrl: string,
+): Promise<FetchedProduct> {
   try {
     const res = await fetch(sourceUrl, {
       headers: {
@@ -185,7 +164,8 @@ export async function fetchAmazonUsProduct(inputUrl: string): Promise<FetchedPro
     const price = extractAmazonPriceFromHtml($, html);
 
     const images = new Set<string>();
-    const landing = $("#landingImage").attr("src") || $("#imgTagWrapperId img").attr("src");
+    const landing =
+      $("#landingImage").attr("src") || $("#imgTagWrapperId img").attr("src");
     if (landing) images.add(landing);
 
     const dynamic = $("#landingImage").attr("data-a-dynamic-image");
@@ -219,7 +199,9 @@ export async function fetchAmazonUsProduct(inputUrl: string): Promise<FetchedPro
     });
 
     const availability = $("#availability").text().toLowerCase();
-    const inStock = !availability.includes("unavailable") && !availability.includes("out of stock");
+    const inStock =
+      !availability.includes("unavailable") &&
+      !availability.includes("out of stock");
 
     if (!title || !price) {
       return fallbackProduct(asin, sourceUrl, "parse_missing_title_or_price", {
@@ -250,6 +232,7 @@ export async function fetchAmazonUsProduct(inputUrl: string): Promise<FetchedPro
       weightGrams: weight?.weightGrams ?? null,
       isFallback: false,
       raw: {
+        source: "amazon_html",
         title,
         brand,
         price,
@@ -263,4 +246,43 @@ export async function fetchAmazonUsProduct(inputUrl: string): Promise<FetchedPro
       message: err instanceof Error ? err.message : String(err),
     });
   }
+}
+
+/**
+ * Amazon US 상품 수집.
+ * 1) PA-API 5.0 GetItems (자격 증명 있을 때)
+ * 2) HTML 스크래핑 (차단되면 실패)
+ * 3) ASIN 폴백 ($29.99 임시값)
+ */
+export async function fetchAmazonUsProduct(
+  inputUrl: string,
+): Promise<FetchedProduct> {
+  const asin = extractAsin(inputUrl);
+  if (!asin) {
+    throw new Error("유효한 Amazon US URL 또는 ASIN이 아닙니다.");
+  }
+
+  const sourceUrl = toAmazonUsUrl(asin);
+
+  if (hasAmazonPaapiCredentials()) {
+    try {
+      const fromApi = await fetchAmazonUsProductViaPaapi(asin);
+      if (fromApi && !fromApi.isFallback) {
+        return fromApi;
+      }
+    } catch (err) {
+      console.warn(
+        "[amazon] PA-API failed, trying HTML:",
+        err instanceof Error ? err.message : err,
+      );
+      const htmlResult = await fetchAmazonUsProductViaHtml(asin, sourceUrl);
+      if (!htmlResult.isFallback) return htmlResult;
+      return fallbackProduct(asin, sourceUrl, "paapi_error", {
+        message: err instanceof Error ? err.message : String(err),
+        htmlReason: htmlResult.raw?.reason,
+      });
+    }
+  }
+
+  return fetchAmazonUsProductViaHtml(asin, sourceUrl);
 }

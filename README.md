@@ -19,7 +19,8 @@
 | 네이버 수요 (오픈API 쇼핑 + 검색광고) | **Live** | `NAVER_CLIENT_*`, `NAVER_SEARCHAD_*` |
 | 주간 자동 발굴 (시드 키워드 → 일괄 스캔) | **Live** | `/recommendations` 「이번 주 추천 새로고침」 |
 | 연관 키워드 확장 | **Live(선택)** | 검색광고 연관어, 체크 시 |
-| **Amazon US 소싱·초안·추천** | **주력 · 동작** | URL/ASIN → 추천·초안 · 몰테일 배송 · 차단 시 폴백 |
+| **Amazon US 소싱·초안·추천** | **주력 · 동작** | URL/ASIN → **PA-API 우선** · HTML 폴백 · 차단 시 FALLBACK |
+| Amazon PA-API 5.0 | **연동 완료** | `AMAZON_PAAPI_*` 키 필요 · `npm run smoke:amazon-paapi` |
 | 1688 공급 자동검색 | **OFF(stub)** | UI 기본 숨김 · `NEXT_PUBLIC_SHOW_1688_UI=true` 시에만 |
 | 1688 실원가 | **레거시** | URL + 수동 CNY (비활성 UI) |
 | **시장성 판정** (최소가 vs 경쟁×1.15) | **완료** | SELL / 합배송필요 / 비추천 · 발굴 점수 반영 · 카드 UI |
@@ -52,10 +53,11 @@
 15. **1688 실검색 안정화** — marketOffer API → HTML → Playwright · 선택 storageState 로그인
 16. **Amazon-first 전환** — 추천 UI 주력을 Amazon URL로, 1688 UI 기본 숨김
 17. **Amazon URL 추천 강화** — 몰테일 배송·네이버 시세·시장성 · 폴백($29.99) FALLBACK 배지
+18. **Amazon PA-API 5.0** — GetItems(SigV4) 공식 조회 · HTML/폴백 후순위
 
 ### 다음 방향 (우선순위)
 
-1. Amazon 파싱 성공률(차단 회피) · PA-API 검토  
+1. PA-API 키 발급·스모크 검증 · 검색(SearchItems) 확장  
 2. 채널 API·등록 live · SaaS  
 3. 1688은 보류(해외 가입/제재) |
 
@@ -178,6 +180,7 @@ http://localhost:3000
 | `SMARTSTORE_*` / `COUPANG_*` | 채널 API (없으면 스텁) |
 | `CRON_SECRET` | 배치 보호 |
 | `GEMINI_API_KEY` / `GEMINI_MODEL` / `AI_PROVIDER` | 문구용 Gemini (`npm run ai:import-gemini`) |
+| `AMAZON_PAAPI_ACCESS_KEY` / `SECRET_KEY` / `PARTNER_TAG` | Amazon PA-API 5.0 (미국 Associates) |
 | `NAVER_CLIENT_ID` / `NAVER_CLIENT_SECRET` | 네이버 오픈API 쇼핑검색 |
 | `NAVER_SEARCHAD_ACCESS_KEY` / `SECRET_KEY` / `CUSTOMER_ID` | 검색광고 월간 검색량·연관어 |
 | `DISCOVER_NAVER_MODE` | `auto`(키 있으면 live) / `stub` / `live` |
@@ -218,6 +221,19 @@ npm run smoke:1688-search -- 无线风扇
 ```
 
 권장 운영: **Amazon.com에서 상품 고르기 → URL을 `/recommendations` 또는 `/drafts/new`에 붙이기**.  
+
+**Amazon PA-API (로봇 차단 회피):** Associates 가입·API 승인 후 `.env`에 키 설정.
+
+```bash
+# .env
+AMAZON_PAAPI_ACCESS_KEY=...
+AMAZON_PAAPI_SECRET_KEY=...
+AMAZON_PAAPI_PARTNER_TAG=yourtag-20
+
+npm run smoke:amazon-paapi -- B0CQXG17RL
+```
+
+조회 순서: PA-API GetItems → HTML 스크래핑 → FALLBACK($29.99).  
 
 레거시 1688: `DISCOVER_1688_MODE=stub`(기본). UI는 `NEXT_PUBLIC_SHOW_1688_UI=true` 필요.  
 `1688:session` / Playwright 실검색은 비권장(계정 제재).

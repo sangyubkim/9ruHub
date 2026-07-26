@@ -29,6 +29,7 @@
     "ai:import-gemini": "tsx scripts/import-gemini-from-9rutrip.ts",
     "smoke:gemini": "tsx scripts/smoke-gemini.ts",
     "smoke:discover": "tsx scripts/smoke-discover.ts",
+    "smoke:amazon-paapi": "tsx scripts/smoke-amazon-paapi.ts",
     "smoke:1688-search": "tsx scripts/smoke-1688-search.ts",
     "playwright:install": "playwright install chromium",
     "1688:session": "tsx scripts/1688-save-session.ts",
