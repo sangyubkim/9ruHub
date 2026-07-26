@@ -22,7 +22,10 @@ export function getDemandAdapter(): DemandMallAdapter {
   return new NaverDemandStubAdapter();
 }
 
-/** MVP 기본: 1688 공급가 (DISCOVER_1688_MODE=auto|live|stub) */
+/**
+ * 레거시 발굴 공급 (UI는 Amazon-first, 1688 기본 stub).
+ * DISCOVER_1688_MODE=live 일 때만 실검색.
+ */
 export function getSupplyAdapter(): SupplyMallAdapter {
   const mode = (process.env.DISCOVER_SUPPLY_ADAPTER ?? "1688").toLowerCase();
   if (mode === "aliexpress" || mode === "ali") {

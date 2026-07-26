@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { prisma } from "@/lib/db";
+import { show1688Ui } from "@/lib/features";
 import { build1688SearchUrl } from "@/lib/discover/supply/search-1688";
 import {
   is1688OfferUrl,
@@ -66,6 +67,7 @@ export default async function RecommendationsPage({ searchParams }: PageProps) {
   const params = (await searchParams) ?? {};
   const showIgnored =
     params.ignored === "1" || params.ignored === "true";
+  const chinaUi = show1688Ui();
 
   const tenantId = await getDefaultTenantId();
   const [items, ignoredCount] = await Promise.all([
@@ -109,20 +111,33 @@ export default async function RecommendationsPage({ searchParams }: PageProps) {
           AI 상품 발굴 · 추천
         </h2>
         <p className="mt-2 text-sm text-zinc-600">
-          시드 키워드로 「이번 주 추천」을 자동 스캔하거나, 직접 키워드를 넣어
-          검증할 수 있습니다. 네이버 수요는 live, 1688 원가는 URL/수동 원가로
-          붙입니다. AI는 추천 이유 문구만 담당합니다.
+          주력은 Amazon US URL 소싱입니다. 상품 링크를 넣으면 원가·몰테일
+          국제배송·판매가를 추천합니다.
+          {chinaUi
+            ? " 네이버↔1688 발굴은 아래 레거시 섹션에서 사용할 수 있습니다."
+            : " 중국(1688) UI는 기본 비활성입니다."}
         </p>
       </section>
 
-      <WeeklyDiscoverForm />
-
-      <DiscoverKeywordForm />
-
       <section className="space-y-2">
-        <h3 className="text-sm font-semibold text-zinc-700">Amazon URL / 기존 스캔</h3>
+        <h3 className="text-sm font-semibold text-zinc-700">
+          Amazon URL / 기존 스캔
+        </h3>
+        <p className="text-xs text-zinc-500">
+          amazon.com 상품 URL 또는 ASIN → 추천 카드 · 초안 연결
+        </p>
         <RecommendGenerateForm />
       </section>
+
+      {chinaUi ? (
+        <section className="space-y-4 rounded-2xl border border-dashed border-zinc-300 bg-zinc-50/50 p-4">
+          <h3 className="text-sm font-semibold text-zinc-600">
+            레거시 · 네이버↔1688 발굴
+          </h3>
+          <WeeklyDiscoverForm />
+          <DiscoverKeywordForm />
+        </section>
+      ) : null}
 
       <section className="space-y-3">
         <RecommendCleanupBar
@@ -153,7 +168,7 @@ export default async function RecommendationsPage({ searchParams }: PageProps) {
           <p className="rounded-2xl border border-dashed border-zinc-300 bg-white/60 p-8 text-sm text-zinc-500">
             {showIgnored
               ? "무시된 추천이 없습니다."
-              : "추천이 없습니다. 「키워드로 발굴」하거나 Amazon URL / 기존 상품 스캔을 사용하세요."}
+              : "추천이 없습니다. Amazon URL을 넣거나 기존 상품 스캔을 사용하세요."}
           </p>
         ) : (
           items.map((item) => {
@@ -199,11 +214,22 @@ export default async function RecommendationsPage({ searchParams }: PageProps) {
                 : null;
             const isStubCard = Boolean(item.candidate?.isStub);
             const searchHref =
-              item.candidate?.keyword != null
+              chinaUi && item.candidate?.keyword != null
                 ? build1688SearchUrl(item.candidate.keyword)
-                : candidateUrl &&
+                : chinaUi &&
+                    candidateUrl &&
                     !isFake1688StubDetailUrl(candidateUrl) &&
                     candidateUrl.includes("1688.com")
+                  ? candidateUrl
+                  : null;
+            const amazonOrOtherUrl =
+              item.sourceUrl &&
+              !isFake1688StubDetailUrl(item.sourceUrl) &&
+              !item.sourceUrl.includes("1688.com")
+                ? item.sourceUrl
+                : candidateUrl &&
+                    !isFake1688StubDetailUrl(candidateUrl) &&
+                    !candidateUrl.includes("1688.com")
                   ? candidateUrl
                   : null;
 
@@ -215,7 +241,7 @@ export default async function RecommendationsPage({ searchParams }: PageProps) {
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-2">
-                      {item.candidate ? (
+                      {item.candidate && chinaUi ? (
                         <p className="text-xs text-zinc-500">
                           {item.candidate.sourceDemandMall}↔
                           {item.candidate.sourceSupplyMall}
@@ -250,7 +276,16 @@ export default async function RecommendationsPage({ searchParams }: PageProps) {
                         {item.reasonText}
                       </p>
                     ) : null}
-                    {realOfferUrl ? (
+                    {amazonOrOtherUrl ? (
+                      <a
+                        href={amazonOrOtherUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="mt-2 inline-block text-xs text-sky-800 underline"
+                      >
+                        원본 보기
+                      </a>
+                    ) : chinaUi && realOfferUrl ? (
                       <a
                         href={realOfferUrl}
                         target="_blank"
@@ -259,7 +294,7 @@ export default async function RecommendationsPage({ searchParams }: PageProps) {
                       >
                         원본 보기
                       </a>
-                    ) : searchHref ? (
+                    ) : chinaUi && searchHref ? (
                       <a
                         href={searchHref}
                         target="_blank"
@@ -269,16 +304,6 @@ export default async function RecommendationsPage({ searchParams }: PageProps) {
                         {isStubCard
                           ? "1688에서 검색 (스텁·실상품 아님)"
                           : "1688에서 검색"}
-                      </a>
-                    ) : item.sourceUrl &&
-                      !isFake1688StubDetailUrl(item.sourceUrl) ? (
-                      <a
-                        href={item.sourceUrl}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="mt-2 inline-block text-xs text-sky-800 underline"
-                      >
-                        원본 보기
                       </a>
                     ) : null}
                   </div>
@@ -294,7 +319,8 @@ export default async function RecommendationsPage({ searchParams }: PageProps) {
                     ) : null}
                   </div>
                 </div>
-                {item.candidateId &&
+                {chinaUi &&
+                item.candidateId &&
                 item.status !== "IGNORED" &&
                 item.status !== "CONVERTED" ? (
                   <Attach1688CostForm
