@@ -11,6 +11,7 @@ import { DEFAULT_NOTICE } from "@/lib/draft/detail-template";
 import { estimateIntlShipping } from "@/lib/forwarder/shipping-estimate";
 import { defaultPriceRuleFromEnv } from "@/lib/price-engine";
 import { recommendSalePrice } from "@/lib/pricing/recommend";
+import { readWeightGramsFromUnknown } from "@/lib/product/parse-weight";
 import { getDefaultTenantId, upsertProductFromDraft } from "@/lib/tenant";
 
 function toJson(value: unknown): Prisma.InputJsonValue {
@@ -42,7 +43,11 @@ export async function createDraftFromCandidate(
   const cnyToKrw = Number(process.env.CNY_TO_KRW ?? 190);
   const sourcePriceUsdApprox = costCny > 0 ? (costCny * cnyToKrw) / 1380 : 1;
   const envRule = defaultPriceRuleFromEnv();
-  const shippingQuote = estimateIntlShipping({ region: "CN" });
+  const weightGrams = readWeightGramsFromUnknown(candidate.rawMetrics);
+  const shippingQuote = estimateIntlShipping({
+    region: "CN",
+    weightGrams,
+  });
 
   // 발굴 추정가(sellPrice)는 경쟁가로 쓰지 않음 — 네이버 쇼핑 실시세만 사용
   const market = await fetchNaverCompetitorPrices(candidate.keyword);
@@ -156,6 +161,8 @@ export async function createDraftFromCandidate(
               competitorSource: market.source,
               competitorSampleCount: market.prices.length,
               shippingQuote,
+              weightGrams: shippingQuote.weightGrams,
+              weightSource: weightGrams != null ? "candidate" : "default",
               isStub: candidate.isStub,
             }
           : {
@@ -165,6 +172,9 @@ export async function createDraftFromCandidate(
                 ? Number(candidate.marginRate)
                 : null,
               sellPriceKrw,
+              shippingQuote,
+              weightGrams: shippingQuote.weightGrams,
+              weightSource: weightGrams != null ? "candidate" : "default",
               isStub: candidate.isStub,
             },
       ),

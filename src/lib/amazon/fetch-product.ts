@@ -1,4 +1,8 @@
 import * as cheerio from "cheerio";
+import {
+  extractAmazonWeightFromDom,
+  extractAmazonWeightGrams,
+} from "@/lib/product/parse-weight";
 import { extractAsin, toAmazonUsUrl } from "./parse-url";
 
 export type FetchedOption = {
@@ -16,6 +20,8 @@ export type FetchedProduct = {
   inStock: boolean;
   images: string[];
   options: FetchedOption[];
+  /** 파싱된 무게(g). Shipping Weight 우선 */
+  weightGrams?: number | null;
   isFallback: boolean;
   raw?: Record<string, unknown>;
 };
@@ -134,6 +140,12 @@ export async function fetchAmazonUsProduct(inputUrl: string): Promise<FetchedPro
       return fallbackProduct(asin, sourceUrl);
     }
 
+    const weight =
+      extractAmazonWeightFromDom({
+        root: (sel) => $(sel),
+        text: (el) => $(el as never).text(),
+      }) ?? extractAmazonWeightGrams(html);
+
     return {
       asin,
       sourceUrl,
@@ -146,8 +158,16 @@ export async function fetchAmazonUsProduct(inputUrl: string): Promise<FetchedPro
       options: options.length
         ? options
         : [{ name: "Option", values: ["Default"] }],
+      weightGrams: weight?.weightGrams ?? null,
       isFallback: false,
-      raw: { title, brand, price },
+      raw: {
+        title,
+        brand,
+        price,
+        weightGrams: weight?.weightGrams ?? null,
+        weightSource: weight?.source ?? null,
+        weightRaw: weight?.raw ?? null,
+      },
     };
   } catch {
     return fallbackProduct(asin, sourceUrl);

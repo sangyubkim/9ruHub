@@ -24,6 +24,8 @@ export type SupplyOffer = {
   /** Cost in CNY */
   costPriceCny: number;
   moq?: number;
+  /** 파싱된 상품 무게(g). 없으면 배송 기본무게 사용 */
+  weightGrams?: number | null;
   isStub: boolean;
   raw?: Record<string, unknown>;
 };

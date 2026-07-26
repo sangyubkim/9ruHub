@@ -1,6 +1,7 @@
 "use client";
 
 import { MarketVerdictBanner } from "@/app/pricing/MarketVerdictBanner";
+import { readWeightGramsFromUnknown } from "@/lib/product/parse-weight";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 
@@ -8,6 +9,11 @@ type Breakdown = Record<string, unknown>;
 
 function num(v: unknown): number | null {
   return typeof v === "number" && Number.isFinite(v) ? v : null;
+}
+
+function initialWeightGrams(breakdown: Breakdown): string {
+  const fromBreakdown = readWeightGramsFromUnknown(breakdown);
+  return String(fromBreakdown ?? 500);
 }
 
 export function DraftPricingPanel({
@@ -25,7 +31,9 @@ export function DraftPricingPanel({
 }) {
   const router = useRouter();
   const [competitors, setCompetitors] = useState("");
-  const [weightGrams, setWeightGrams] = useState("500");
+  const [weightGrams, setWeightGrams] = useState(() =>
+    initialWeightGrams(breakdown),
+  );
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [preview, setPreview] = useState<{
@@ -168,7 +176,11 @@ export function DraftPricingPanel({
 
       <label className="mt-4 block text-sm">
         <span className="mb-1 block text-zinc-600">
-          무게(g) — 더베이 항공 요금표
+          무게(g) — CN:더베이 / US:몰테일
+          {typeof breakdown.weightSource === "string" &&
+          breakdown.weightSource !== "default"
+            ? ` · 수집: ${breakdown.weightSource}`
+            : " · 기본값(미수집 시)"}
         </span>
         <input
           type="number"

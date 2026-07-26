@@ -23,6 +23,7 @@ Amazon US·중국몰 소싱 → 발굴 → 초안 → 채널 등록/동기화 �
 | **시장성 판정** (최소가 vs 경쟁×1.15) | **완료** | SELL / 합배송필요 / 비추천 · 네이버 실시세 |
 | **더베이 항공 kg 요금표** | **완료** | 셀러 등급 · 무게→국제배송 (기본 500g) |
 | **몰테일 미국 LBS 요금표** | **완료** | 일반회원 + 유류할증 $1 · USD→KRW |
+| **상품 실무게 수집** | **완료(best-effort)** | Amazon/1688 파싱 → 국제배송 견적 · 실패 시 500g |
 | 쿠팡 / 알리 / 타오바오 발굴 | **확장 스텁만** | |
 | Amazon US 소싱·초안 | **동작** | 차단 시 폴백 초안 |
 | AI 문구 (Gemini) | **선택** | 한도 초과 시 템플릿 폴백 · 점수는 코드 |
@@ -44,13 +45,13 @@ Amazon US·중국몰 소싱 → 발굴 → 초안 → 채널 등록/동기화 �
 9. **더베이 항공 요금표** — 고정 1.5만원 대신 무게 구간(셀러)으로 국제배송 계산
 10. **몰테일 미국 요금표** — LBS·USD + 유류할증, Amazon 경로에 적용
 11. **왼쪽 사이드바 UI** — 발굴·가격 / 상품 등록 / 운영 그룹, 모바일 접이식 메뉴
+12. **상품 실무게 수집** — Amazon Shipping/Item Weight, 1688 净重/毛重 → `estimateIntlShipping`
 
 ### 다음 방향 (우선순위)
 
-1. **상품 실무게 수집** (1688/Amazon) — 기본 500g 가정 대체  
-2. **1688 키워드 자동검색**  
-3. 발굴 점수에 시장성 반영  
-4. 채널 API·자동주문 live · SaaS |
+1. **1688 키워드 자동검색**  
+2. 발굴 점수에 시장성 반영  
+3. 채널 API·자동주문 live · SaaS |
 
 ### 목표 스펙 vs 지금 (발굴)
 
@@ -258,8 +259,9 @@ GET|POST /api/cron/discover-weekly
 | … | … |
 | 4.0kg | 15,800원 |
 
-무게 미입력 시 `DEFAULT_SHIPPING_WEIGHT_G=500`.  
-`FORWARDER_SHIPPING_MODE=flat`이면 예전처럼 고정 `SHIPPING_FEE_KRW` 사용.
+무게: Amazon/1688 페이지에서 파싱되면 그 값을 쓰고, 없으면 `DEFAULT_SHIPPING_WEIGHT_G=500`.  
+`FORWARDER_SHIPPING_MODE=flat`이면 예전처럼 고정 `SHIPPING_FEE_KRW` 사용.  
+파서: `src/lib/product/parse-weight.ts` (초안 `costBreakdown.weightGrams` / 후보 `rawMetrics.weightGrams`).
 
 **몰테일 미국 (일반회원)** — `src/lib/forwarder/rates/malltail-air.ts`
 

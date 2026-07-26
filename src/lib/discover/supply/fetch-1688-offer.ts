@@ -5,6 +5,7 @@ import {
   extract1688OfferId,
   to1688OfferUrl,
 } from "@/lib/discover/supply/parse-1688-url";
+import { extract1688WeightGrams } from "@/lib/product/parse-weight";
 
 export type Fetched1688Offer = SupplyOffer & {
   isFallback: boolean;
@@ -19,6 +20,8 @@ export function parse1688CostFromHtml(html: string): {
   costPriceCny: number | null;
   title: string | null;
   moq: number | null;
+  weightGrams: number | null;
+  weightSource: string | null;
 } {
   const $ = cheerio.load(html);
   const title =
@@ -59,11 +62,14 @@ export function parse1688CostFromHtml(html: string): {
   const moqMatch = html.match(/"beginAmount"\s*:\s*"?(?<m>\d+)"?/i);
   const moq = moqMatch?.groups?.m ? Number(moqMatch.groups.m) : null;
 
+  const weight = extract1688WeightGrams(html);
   const costPriceCny = pickReasonablePrice(candidates);
   return {
     costPriceCny,
     title: title && !/验证|登录|login/i.test(title) ? title.slice(0, 200) : null,
     moq: moq && Number.isFinite(moq) ? moq : null,
+    weightGrams: weight?.weightGrams ?? null,
+    weightSource: weight?.source ?? null,
   };
 }
 
@@ -146,6 +152,7 @@ export async function fetch1688Offer(
       externalSupplyId: offerId,
       costPriceCny: cost,
       moq: parsed.moq ?? undefined,
+      weightGrams: parsed.weightGrams,
       isStub: false,
       isFallback: usedOverride,
       raw: {
@@ -153,6 +160,8 @@ export async function fetch1688Offer(
         usedOverride,
         parsedCost: parsed.costPriceCny,
         source: usedOverride ? "manual_override" : "html_parse",
+        weightGrams: parsed.weightGrams,
+        weightSource: parsed.weightSource,
       },
     };
   } catch (err) {

@@ -76,6 +76,7 @@ export async function apply1688SupplyUrlToRecommendation(
     externalSupplyId: offer.externalSupplyId,
     costPriceCny: offer.costPriceCny,
     moq: offer.moq,
+    weightGrams: offer.weightGrams,
     isStub: offer.isStub,
     raw: offer.raw,
   });
@@ -152,6 +153,7 @@ export async function apply1688SupplyUrlToRecommendation(
     offer: {
       supplyUrl: offer.supplyUrl,
       costPriceCny: offer.costPriceCny,
+      weightGrams: offer.weightGrams ?? null,
       isFallback: offer.isFallback,
       fetchError: offer.fetchError ?? null,
     },

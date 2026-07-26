@@ -60,7 +60,11 @@ export function joinDemandAndSupply(
     isStub: demand.isStub || offer.isStub,
     rawMetrics: {
       demand: demand.raw ?? {},
-      supply: offer.raw ?? {},
+      supply: {
+        ...(offer.raw ?? {}),
+        weightGrams: offer.weightGrams ?? null,
+      },
+      weightGrams: offer.weightGrams ?? null,
       pricing: {
         cnyToKrw,
         landedMultiplier,

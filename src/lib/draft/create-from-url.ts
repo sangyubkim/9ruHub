@@ -75,7 +75,10 @@ export async function createDraftFromUrl(
   const { estimateIntlShipping } = await import(
     "@/lib/forwarder/shipping-estimate"
   );
-  const shippingQuote = estimateIntlShipping({ region: "US" });
+  const shippingQuote = estimateIntlShipping({
+    region: "US",
+    weightGrams: product.weightGrams,
+  });
   const ruleWithMalltail = {
     ...rule,
     chinaShippingFeeKrw: rule.chinaShippingFeeKrw ?? 0,
@@ -85,6 +88,11 @@ export async function createDraftFromUrl(
   const breakdown = {
     ...calculateSalePrice(product.sourcePrice, ruleWithMalltail),
     shippingQuote,
+    weightGrams: shippingQuote.weightGrams,
+    weightSource:
+      product.weightGrams != null
+        ? (product.raw?.weightSource ?? "amazon_parse")
+        : "default",
   };
 
   let titleKo = localizeTitle(product.title, product.brand);
