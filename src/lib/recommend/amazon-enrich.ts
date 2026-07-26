@@ -1,6 +1,9 @@
 import type { FetchedProduct } from "@/lib/amazon/fetch-product";
 import { fetchNaverCompetitorPrices } from "@/lib/discover/demand/naver-competitors";
-import { estimateIntlShipping } from "@/lib/forwarder/shipping-estimate";
+import {
+  estimateIntlShipping,
+  type IntlShippingQuote,
+} from "@/lib/forwarder/shipping-estimate";
 import {
   calculateSalePrice,
   defaultPriceRuleFromEnv,
@@ -10,6 +13,17 @@ import { evaluateMarketViability } from "@/lib/pricing/viability";
 import { keywordFromAmazonTitle } from "@/lib/recommend/keyword-from-amazon";
 import { getTenantPriceRule } from "@/lib/tenant";
 
+export type ShippingDetail = {
+  feeKrw: number;
+  weightGrams: number;
+  billableLbs: number | null;
+  totalUsd: number | null;
+  provider: string;
+  tier: string;
+  note: string | null;
+  weightSource: "amazon_parse" | "default";
+};
+
 export type AmazonPriced = {
   salePriceKrw: number;
   costKrw: number;
@@ -17,7 +31,26 @@ export type AmazonPriced = {
   intlShippingKrw: number;
   minViableSaleKrw: number;
   weightGrams: number;
+  /** 가격 규칙 목표 마진 (MARGIN_RATE / DB) */
+  targetMarginRate: number;
+  shipping: ShippingDetail;
 };
+
+function toShippingDetail(
+  quote: IntlShippingQuote,
+  weightSource: "amazon_parse" | "default",
+): ShippingDetail {
+  return {
+    feeKrw: quote.feeKrw,
+    weightGrams: quote.weightGrams,
+    billableLbs: quote.billableLbs ?? null,
+    totalUsd: quote.totalUsd ?? null,
+    provider: quote.provider,
+    tier: quote.tier,
+    note: quote.note ?? null,
+    weightSource,
+  };
+}
 
 export type AmazonMarketEnrichment = {
   keyword: string;
@@ -53,9 +86,13 @@ export async function priceAmazonUsProduct(
   weightGrams?: number | null,
 ): Promise<AmazonPriced> {
   const rule = await loadPriceRule(tenantId);
+  const parsedWeight =
+    weightGrams != null && Number.isFinite(weightGrams) && weightGrams > 0
+      ? weightGrams
+      : null;
   const shippingQuote = estimateIntlShipping({
     region: "US",
-    weightGrams,
+    weightGrams: parsedWeight,
   });
   const ruleWithMalltail: PriceRuleInput = {
     ...rule,
@@ -77,6 +114,11 @@ export async function priceAmazonUsProduct(
     intlShippingKrw: shippingQuote.feeKrw,
     minViableSaleKrw: costKrw,
     weightGrams: shippingQuote.weightGrams,
+    targetMarginRate: rule.marginRate,
+    shipping: toShippingDetail(
+      shippingQuote,
+      parsedWeight != null ? "amazon_parse" : "default",
+    ),
   };
 }
 

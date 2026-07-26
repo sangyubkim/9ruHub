@@ -24,13 +24,26 @@ describe("withAmazonScoreFeatures", () => {
         competitorAvgKrw: 39900,
         isFallback: false,
         naverKeyword: "AirPods Pro",
+        targetMarginRate: 0.2,
+        shipping: {
+          feeKrw: 18000,
+          weightGrams: 500,
+          billableLbs: 2,
+          totalUsd: 13.04,
+          provider: "malltail",
+          tier: "general",
+          note: "malltail air lbs + fuel $1",
+          weightSource: "default",
+        },
       },
     );
     expect(out.features.sellPriceKrw).toBe(27300);
     expect(out.features.sourceCostKrw).toBe(17745);
     expect(out.features.sourcePriceUsd).toBe(19.99);
     expect(out.features.marginRate).toBeCloseTo(0.35, 2);
+    expect(out.features.targetMarginRate).toBe(0.2);
     expect(out.features.intlShippingKrw).toBe(18000);
+    expect(out.features.shipping?.billableLbs).toBe(2);
     expect(out.features.competitorAvgKrw).toBe(39900);
     expect(out.features.isFallback).toBe(false);
     expect(out.total).toBe(78);

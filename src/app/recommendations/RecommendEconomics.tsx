@@ -27,6 +27,17 @@ const LABEL_PILL: Record<string, string> = {
   FALLBACK: "bg-red-700 text-white",
 };
 
+export type ShippingQuoteView = {
+  feeKrw: number;
+  weightGrams: number;
+  billableLbs: number | null;
+  totalUsd: number | null;
+  provider: string;
+  tier: string;
+  note: string | null;
+  weightSource: "amazon_parse" | "default" | string;
+};
+
 export function RecommendEconomics({
   score,
   reasonCode,
@@ -40,7 +51,9 @@ export function RecommendEconomics({
   sourceCostKrw,
   intlShippingKrw,
   marginRate,
+  targetMarginRate,
   searchVolume,
+  shipping,
   marketVerdict,
 }: {
   score: number;
@@ -56,8 +69,12 @@ export function RecommendEconomics({
   competitorAvgKrw?: number | null;
   sourceCostKrw?: number | null;
   intlShippingKrw?: number | null;
+  /** 실마진 (판매가−원가)/판매가 */
   marginRate?: number | null;
+  /** 가격 규칙 목표 마진 (MARGIN_RATE) */
+  targetMarginRate?: number | null;
   searchVolume?: number | null;
+  shipping?: ShippingQuoteView | null;
   marketVerdict?: Verdict | null;
 }) {
   const verdictCode = marketVerdict?.code;
@@ -160,10 +177,18 @@ export function RecommendEconomics({
             </dd>
           </div>
           <div>
-            <dt className="text-xs text-zinc-500">마진</dt>
+            <dt className="text-xs text-zinc-500">실마진</dt>
             <dd className="font-semibold text-zinc-900">
               {marginRate != null
                 ? `${(marginRate * 100).toFixed(1)}%`
+                : "—"}
+            </dd>
+          </div>
+          <div>
+            <dt className="text-xs text-zinc-500">목표 마진</dt>
+            <dd className="font-semibold text-zinc-900">
+              {targetMarginRate != null
+                ? `${(targetMarginRate * 100).toFixed(0)}%`
                 : "—"}
             </dd>
           </div>
@@ -177,6 +202,40 @@ export function RecommendEconomics({
           </div>
         </dl>
       </div>
+
+      {shipping ? (
+        <div className="rounded-xl border border-zinc-200 bg-white/80 px-3 py-2.5 text-xs text-zinc-600">
+          <p className="font-semibold text-zinc-800">국제배송 근거</p>
+          <p className="mt-1">
+            무게{" "}
+            <span className="font-medium text-zinc-900">
+              {shipping.weightGrams.toLocaleString("ko-KR")}g
+            </span>
+            {shipping.billableLbs != null
+              ? ` · 청구 ${shipping.billableLbs} LBS`
+              : null}
+            {shipping.weightSource === "default"
+              ? " (기본값, 상품 무게 미파싱)"
+              : " (Amazon 페이지 파싱)"}
+          </p>
+          <p className="mt-0.5">
+            요금표{" "}
+            <span className="font-medium text-zinc-900">
+              {shipping.provider}
+              {shipping.tier !== "n/a" ? ` · ${shipping.tier}` : ""}
+            </span>
+            {shipping.totalUsd != null
+              ? ` · $${shipping.totalUsd.toFixed(2)}`
+              : null}
+            {intlShippingKrw != null
+              ? ` → ${intlShippingKrw.toLocaleString("ko-KR")}원`
+              : null}
+          </p>
+          {shipping.note ? (
+            <p className="mt-0.5 text-zinc-500">{shipping.note}</p>
+          ) : null}
+        </div>
+      ) : null}
 
       <MarketVerdictBanner verdict={marketVerdict} />
     </div>

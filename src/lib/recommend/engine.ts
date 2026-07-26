@@ -117,6 +117,8 @@ export async function generateRecommendationsForTenant(options?: {
         marketVerdict: market.marketVerdict,
         isFallback: false,
         naverKeyword: market.keyword,
+        targetMarginRate: priced.targetMarginRate,
+        shipping: priced.shipping,
       },
     );
 
@@ -273,6 +275,8 @@ export async function createRecommendationFromUrl(
       marketVerdict: market.marketVerdict,
       isFallback: fetched.isFallback,
       naverKeyword: market.keyword,
+      targetMarginRate: priced.targetMarginRate,
+      shipping: priced.shipping,
     },
   );
 

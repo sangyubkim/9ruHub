@@ -69,6 +69,28 @@ function featureBool(breakdown: unknown, key: string): boolean {
   return features?.[key] === true;
 }
 
+function readShipping(breakdown: unknown) {
+  if (!breakdown || typeof breakdown !== "object") return null;
+  const features = (breakdown as { features?: Record<string, unknown> }).features;
+  const s = features?.shipping;
+  if (!s || typeof s !== "object") return null;
+  const o = s as Record<string, unknown>;
+  if (typeof o.feeKrw !== "number" || typeof o.weightGrams !== "number") {
+    return null;
+  }
+  return {
+    feeKrw: o.feeKrw,
+    weightGrams: o.weightGrams,
+    billableLbs: typeof o.billableLbs === "number" ? o.billableLbs : null,
+    totalUsd: typeof o.totalUsd === "number" ? o.totalUsd : null,
+    provider: typeof o.provider === "string" ? o.provider : "?",
+    tier: typeof o.tier === "string" ? o.tier : "n/a",
+    note: typeof o.note === "string" ? o.note : null,
+    weightSource:
+      typeof o.weightSource === "string" ? o.weightSource : "default",
+  };
+}
+
 type PageProps = {
   searchParams?: Promise<{ ignored?: string }>;
 };
@@ -233,6 +255,13 @@ export default async function RecommendationsPage({ searchParams }: PageProps) {
             const isFallbackCard =
               featureBool(item.scoreBreakdown, "isFallback") ||
               item.reasonCode === "FALLBACK";
+            const targetMargin = featureNumber(
+              item.scoreBreakdown,
+              "targetMarginRate",
+            );
+            const shipping = isFallbackCard
+              ? null
+              : readShipping(item.scoreBreakdown);
 
             const candidateUrl =
               item.candidate?.supplyUrl ?? item.sourceUrl ?? null;
@@ -302,7 +331,11 @@ export default async function RecommendationsPage({ searchParams }: PageProps) {
                         isFallbackCard ? null : intlShippingKrw
                       }
                       marginRate={isFallbackCard ? null : margin}
+                      targetMarginRate={
+                        isFallbackCard ? null : targetMargin
+                      }
                       searchVolume={vol}
+                      shipping={shipping}
                       marketVerdict={marketVerdict}
                     />
                     {item.reasonText ? (
