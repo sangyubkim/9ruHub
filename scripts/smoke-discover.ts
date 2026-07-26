@@ -24,9 +24,10 @@ async function main() {
   if (result.created < 1) {
     throw new Error("discover created 0 items");
   }
-  if (!result.isStub) {
-    throw new Error("expected stub adapters in smoke");
-  }
+  // 수요: 네이버 키 있으면 live / 공급(1688)은 아직 스텁일 수 있음
+  console.log(
+    `discover ok: created=${result.created} isStub=${result.isStub} keyword=${result.keyword}`,
+  );
 
   const candidate = await prisma.productCandidate.findFirst({
     where: { keyword: "무선선풍기", tenantId: result.tenantId },

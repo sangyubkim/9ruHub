@@ -5,9 +5,13 @@ import {
   ignoredRecommendationWhere,
 } from "@/lib/recommend/filters";
 import { getDefaultTenantId } from "@/lib/tenant";
+import { Attach1688CostForm } from "@/app/recommendations/Attach1688CostForm";
 import { DiscoverKeywordForm } from "@/app/recommendations/DiscoverKeywordForm";
+import { FreshScanBadge } from "@/app/recommendations/FreshScanBadge";
 import { RecommendActions } from "@/app/recommendations/RecommendActions";
+import { RecommendCleanupBar } from "@/app/recommendations/RecommendCleanupBar";
 import { RecommendGenerateForm } from "@/app/recommendations/RecommendGenerateForm";
+import { WeeklyDiscoverForm } from "@/app/recommendations/WeeklyDiscoverForm";
 
 export const dynamic = "force-dynamic";
 
@@ -53,6 +57,7 @@ export default async function RecommendationsPage({ searchParams }: PageProps) {
             rating: true,
             reviewCount: true,
             isStub: true,
+            supplyUrl: true,
             sourceDemandMall: true,
             sourceSupplyMall: true,
           },
@@ -72,11 +77,13 @@ export default async function RecommendationsPage({ searchParams }: PageProps) {
           AI 상품 발굴 · 추천
         </h2>
         <p className="mt-2 text-sm text-zinc-600">
-          ① 네이버 키워드 ↔ 1688 원가로 후보를 만들고 규칙 점수를 매깁니다. GPT는
-          이유 문구만 담당합니다(키 없으면 템플릿). 원클릭으로 초안을 만든 뒤
-          승인·등록 흐름으로 이어집니다.
+          시드 키워드로 「이번 주 추천」을 자동 스캔하거나, 직접 키워드를 넣어
+          검증할 수 있습니다. 네이버 수요는 live, 1688 원가는 URL/수동 원가로
+          붙입니다. AI는 추천 이유 문구만 담당합니다.
         </p>
       </section>
+
+      <WeeklyDiscoverForm />
 
       <DiscoverKeywordForm />
 
@@ -86,6 +93,10 @@ export default async function RecommendationsPage({ searchParams }: PageProps) {
       </section>
 
       <section className="space-y-3">
+        <RecommendCleanupBar
+          activeCount={showIgnored ? 0 : items.length}
+          ignoredCount={ignoredCount}
+        />
         <div className="flex flex-wrap items-center justify-between gap-2">
           <h3 className="text-sm font-semibold text-zinc-700">
             {showIgnored ? "무시된 추천" : "추천 목록"}
@@ -142,6 +153,7 @@ export default async function RecommendationsPage({ searchParams }: PageProps) {
                         ? ` · ${item.candidate.sourceDemandMall}↔${item.candidate.sourceSupplyMall}`
                         : ""}
                       {item.candidate?.isStub ? " · STUB" : ""}
+                      <FreshScanBadge recommendationId={item.id} />
                     </p>
                     <h3 className="mt-1 text-lg font-semibold">{item.title}</h3>
                     {item.candidate?.keyword ? (
@@ -187,6 +199,18 @@ export default async function RecommendationsPage({ searchParams }: PageProps) {
                     ) : null}
                   </div>
                 </div>
+                {item.candidateId &&
+                item.status !== "IGNORED" &&
+                item.status !== "CONVERTED" ? (
+                  <Attach1688CostForm
+                    recommendationId={item.id}
+                    initialUrl={
+                      item.sourceUrl?.includes("1688.com")
+                        ? item.sourceUrl
+                        : item.candidate?.supplyUrl
+                    }
+                  />
+                ) : null}
                 <RecommendActions
                   id={item.id}
                   status={item.status}

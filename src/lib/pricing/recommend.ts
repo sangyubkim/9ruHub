@@ -1,4 +1,9 @@
 import Decimal from "decimal.js";
+import {
+  evaluateMarketViability,
+  splitIntlShipping,
+  type MarketVerdict,
+} from "@/lib/pricing/viability";
 
 export type PricingStrategy = "cost_plus_competitor_clamp";
 
@@ -27,6 +32,10 @@ export type RecommendPriceInput = {
   currency?: "KRW" | "USD" | "CNY" | string;
   usdToKrw?: number;
   cnyToKrw?: number;
+  /** 시장 천장 배수 (기본 1.15) */
+  marketCeilingRate?: number;
+  /** 합배송 가정 건수 */
+  consolidationUnits?: number;
 };
 
 export type CompetitorBand = {
@@ -61,6 +70,7 @@ export type RecommendPriceResult = {
     | "cost_plus_below_market"
     | "competitor_undercut"
     | "competitor_clamp_min_margin";
+  marketVerdict: MarketVerdict;
   explanation: string;
   /** draft.costBreakdown 저장용 */
   costBreakdown: Record<string, unknown>;
@@ -129,7 +139,9 @@ export function computeCompetitorBand(
   return null;
 }
 
-function buildExplanation(result: Omit<RecommendPriceResult, "explanation" | "costBreakdown">): string {
+function buildExplanation(
+  result: Omit<RecommendPriceResult, "explanation" | "costBreakdown">,
+): string {
   const parts = [
     `원가 ${result.sourceCostKrw.toLocaleString("ko-KR")}원 + 중국배송 ${result.chinaShippingKrw.toLocaleString("ko-KR")}원 + 국제배송 ${result.intlShippingKrw.toLocaleString("ko-KR")}원 + 관세 ${result.dutyKrw.toLocaleString("ko-KR")}원 + 대행 ${result.agencyFeeKrw.toLocaleString("ko-KR")}원 기준 cost-plus ${result.costPlusSaleKrw.toLocaleString("ko-KR")}원.`,
   ];
@@ -152,6 +164,9 @@ function buildExplanation(result: Omit<RecommendPriceResult, "explanation" | "co
 
   parts.push(
     `추천 판매가 ${result.recommendedSalePriceKrw.toLocaleString("ko-KR")}원 (카드 ${(result.cardFeeRate * 100).toFixed(1)}% · 플랫폼 ${(result.platformFeeRate * 100).toFixed(1)}% 반영).`,
+  );
+  parts.push(
+    `[시장성] ${result.marketVerdict.label}: ${result.marketVerdict.message}`,
   );
   return parts.join(" ");
 }
@@ -182,6 +197,13 @@ export function recommendSalePrice(
   const roundTo = input.roundTo ?? 100;
   const strategy: PricingStrategy =
     input.strategy ?? "cost_plus_competitor_clamp";
+  const marketCeilingRate =
+    input.marketCeilingRate ?? Number(process.env.MARKET_CEILING_RATE ?? 1.15);
+  const consolidationUnits = Math.max(
+    2,
+    input.consolidationUnits ??
+      Number(process.env.SHIPPING_CONSOLIDATION_UNITS ?? 5),
+  );
 
   const sourceCostKrw = new Decimal(
     toKrw(input.cost, currency, usdToKrw, cnyToKrw),
@@ -205,6 +227,24 @@ export function recommendSalePrice(
   const minViableRaw = landed.mul(new Decimal(1).plus(minMarginRate));
   const minViableSaleKrw = roundUpTo(
     feeDenom.lte(0) ? minViableRaw : minViableRaw.div(feeDenom),
+    roundTo,
+  );
+
+  // 합배송 가정: 국제배송만 N등분
+  const consolidatedIntl = splitIntlShipping(
+    intlShippingKrw,
+    consolidationUnits,
+  );
+  const consolidatedLanded = sourceCostKrw
+    .plus(chinaShippingKrw)
+    .plus(consolidatedIntl)
+    .plus(dutyKrw)
+    .plus(agencyFeeKrw);
+  const consolidatedMinRaw = consolidatedLanded.mul(
+    new Decimal(1).plus(minMarginRate),
+  );
+  const consolidatedMinViableKrw = roundUpTo(
+    feeDenom.lte(0) ? consolidatedMinRaw : consolidatedMinRaw.div(feeDenom),
     roundTo,
   );
 
@@ -237,6 +277,15 @@ export function recommendSalePrice(
       strategyCode = "cost_plus_below_market";
     }
   }
+
+  const marketVerdict = evaluateMarketViability({
+    minViableSaleKrw,
+    costPlusSaleKrw,
+    competitorAvgKrw: competitors?.avg ?? null,
+    ceilingRate: marketCeilingRate,
+    consolidationUnits,
+    consolidatedMinViableKrw,
+  });
 
   const sale = new Decimal(recommendedSalePriceKrw);
   const cardFeeKrw = sale
@@ -279,6 +328,7 @@ export function recommendSalePrice(
     recommendedSalePriceKrw,
     strategy,
     strategyCode,
+    marketVerdict,
   };
 
   const explanation = buildExplanation(base);
@@ -287,6 +337,8 @@ export function recommendSalePrice(
     ...base,
     shippingFeeKrw: chinaShippingKrw + intlShippingKrw,
     salePriceKrw: recommendedSalePriceKrw,
+    consolidatedMinViableKrw,
+    consolidationUnits,
     explanation,
   };
 

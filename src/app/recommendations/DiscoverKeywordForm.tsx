@@ -60,10 +60,10 @@ export function DiscoverKeywordForm() {
 
   return (
     <section className="rounded-2xl border border-sky-200 bg-sky-50/60 p-5">
-      <h3 className="text-sm font-semibold text-sky-900">키워드로 발굴</h3>
+      <h3 className="text-sm font-semibold text-sky-900">키워드 수동 발굴</h3>
       <p className="mt-1 text-xs text-sky-900/70">
-        네이버 수요 ↔ 1688 원가 (규칙 점수). 라이브 크롤 전 스텁 메트릭으로 UI를
-        검증합니다.
+        특정 키워드만 빠르게 검증할 때 사용합니다. 자동 발굴은 위 「이번 주 추천
+        새로고침」을 쓰세요.
       </p>
       <form onSubmit={submit} className="mt-3 flex flex-col gap-3 sm:flex-row">
         <input

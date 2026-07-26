@@ -1,5 +1,6 @@
 "use client";
 
+import { MarketVerdictBanner } from "@/app/pricing/MarketVerdictBanner";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 
@@ -38,7 +39,32 @@ export function DraftPricingPanel({
     platformFeeKrw: number;
     marginKrw: number;
     landedCostKrw: number;
+    marketVerdict?: {
+      code: string;
+      label: string;
+      message: string;
+      competitorAvgKrw?: number | null;
+      marketCeilingKrw?: number | null;
+      minViableSaleKrw?: number;
+      consolidatedMinViableKrw?: number | null;
+      consolidationUnits?: number;
+    };
   } | null>(null);
+
+  const savedVerdict =
+    breakdown.marketVerdict &&
+    typeof breakdown.marketVerdict === "object"
+      ? (breakdown.marketVerdict as {
+          code: string;
+          label: string;
+          message: string;
+          competitorAvgKrw?: number | null;
+          marketCeilingKrw?: number | null;
+          minViableSaleKrw?: number;
+          consolidatedMinViableKrw?: number | null;
+          consolidationUnits?: number;
+        })
+      : null;
 
   const rows = useMemo(() => {
     const china = num(breakdown.chinaShippingKrw);
@@ -129,6 +155,12 @@ export function DraftPricingPanel({
           ),
         )}
       </dl>
+
+      <div className="mt-3">
+        <MarketVerdictBanner
+          verdict={preview?.marketVerdict ?? savedVerdict}
+        />
+      </div>
 
       {typeof breakdown.explanation === "string" ? (
         <p className="mt-3 rounded-xl bg-zinc-50 p-3 text-sm text-zinc-700">

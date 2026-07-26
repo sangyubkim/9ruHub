@@ -81,6 +81,30 @@ describe("recommendSalePrice", () => {
     expect(result.strategyCode).toBe("competitor_undercut");
   });
 
+  it("배송비 과다+저경쟁가면 NOT_RECOMMENDED 시장성", () => {
+    // ¥23 × 190 ≈ 4370, intl 15000, agency 3000, duty 8%
+    const result = recommendSalePrice({
+      cost: 23,
+      currency: "CNY",
+      cnyToKrw: 190,
+      chinaShipping: 0,
+      intlShipping: 15000,
+      dutyRate: 0.08,
+      agencyFee: 3000,
+      marginRate: 0.35,
+      minMarginRate: 0.05,
+      platformFeeRate: 0.1,
+      cardFeeRate: 0.025,
+      roundTo: 100,
+      competitors: [9000, 9800, 11000],
+      marketCeilingRate: 1.15,
+      consolidationUnits: 5,
+    });
+    expect(result.minViableSaleKrw).toBeGreaterThan(20000);
+    expect(result.marketVerdict.code).toBe("NOT_RECOMMENDED");
+    expect(result.explanation).toContain("판매 비추천");
+  });
+
   it("USD 원가를 KRW로 환산", () => {
     const result = recommendSalePrice({
       cost: 20,

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { MarketVerdictBanner } from "@/app/pricing/MarketVerdictBanner";
 
 type RecommendResult = {
   sourceCostKrw: number;
@@ -13,10 +14,21 @@ type RecommendResult = {
   marginKrw: number;
   landedCostKrw: number;
   costPlusSaleKrw: number;
+  minViableSaleKrw: number;
   recommendedSalePriceKrw: number;
   strategyCode: string;
   explanation: string;
   competitors: { min: number; avg: number; max: number; count: number } | null;
+  marketVerdict?: {
+    code: string;
+    label: string;
+    message: string;
+    competitorAvgKrw?: number | null;
+    marketCeilingKrw?: number | null;
+    minViableSaleKrw?: number;
+    consolidatedMinViableKrw?: number | null;
+    consolidationUnits?: number;
+  };
 };
 
 function parseCompetitors(raw: string): number[] {
@@ -174,6 +186,7 @@ export function PricingTool({ draftId }: { draftId?: string }) {
             <p className="text-2xl font-semibold tracking-tight">
               {result.recommendedSalePriceKrw.toLocaleString("ko-KR")}원
             </p>
+            <MarketVerdictBanner verdict={result.marketVerdict} />
             <dl className="grid grid-cols-2 gap-2">
               <div>
                 <dt className="text-zinc-500">원가</dt>

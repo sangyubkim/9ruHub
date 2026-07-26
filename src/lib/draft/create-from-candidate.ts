@@ -5,6 +5,7 @@ import {
   Prisma,
   SourceMall,
 } from "@/generated/prisma/client";
+import { fetchNaverCompetitorPrices } from "@/lib/discover/demand/naver-competitors";
 import { prisma } from "@/lib/db";
 import { DEFAULT_NOTICE } from "@/lib/draft/detail-template";
 import { defaultPriceRuleFromEnv } from "@/lib/price-engine";
@@ -40,10 +41,9 @@ export async function createDraftFromCandidate(
   const cnyToKrw = Number(process.env.CNY_TO_KRW ?? 190);
   const sourcePriceUsdApprox = costCny > 0 ? (costCny * cnyToKrw) / 1380 : 1;
   const envRule = defaultPriceRuleFromEnv();
-  const marketHint =
-    candidate.sellPrice != null && candidate.sellPrice > 0
-      ? candidate.sellPrice
-      : null;
+
+  // 발굴 추정가(sellPrice)는 경쟁가로 쓰지 않음 — 네이버 쇼핑 실시세만 사용
+  const market = await fetchNaverCompetitorPrices(candidate.keyword);
   const priced =
     costCny > 0
       ? recommendSalePrice({
@@ -64,7 +64,8 @@ export async function createDraftFromCandidate(
           minMarginRate: envRule.minMarginRate,
           undercutRate: envRule.undercutRate,
           roundTo: envRule.roundTo,
-          competitors: marketHint ? [marketHint] : undefined,
+          competitors:
+            market.prices.length > 0 ? market.prices : undefined,
         })
       : null;
   const sellPriceKrw =
@@ -148,7 +149,11 @@ export async function createDraftFromCandidate(
               ...priced.costBreakdown,
               mode: "discover-candidate",
               costPriceCny: costCny,
-              marketHintKrw: marketHint,
+              discoverEstimateKrw: candidate.sellPrice
+                ? Number(candidate.sellPrice)
+                : null,
+              competitorSource: market.source,
+              competitorSampleCount: market.prices.length,
               isStub: candidate.isStub,
             }
           : {

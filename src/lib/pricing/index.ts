@@ -6,3 +6,9 @@ export {
   type RecommendPriceInput,
   type RecommendPriceResult,
 } from "./recommend";
+export {
+  evaluateMarketViability,
+  splitIntlShipping,
+  type MarketVerdict,
+  type MarketVerdictCode,
+} from "./viability";

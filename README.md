@@ -1,29 +1,85 @@
 # Sourcing Hub / AI 구매대행 OS (9ruHub)
 
-Amazon US 소싱 → 초안 → 채널 등록/동기화에 더해, **SaaS 멀티테넌트 DB** 위에 추천·주문·물류·수익분석 기반을 쌓는 Next.js + PostgreSQL 앱입니다.
+Amazon US·중국몰 소싱 → 발굴 → 초안 → 채널 등록/동기화 → 주문·물류·수익분석까지 쌓는 Next.js + PostgreSQL 앱입니다.
 
 원격: https://github.com/sangyubkim/9ruHub.git
+
+> **문서 운영:** 개발 **현재 상태 / 진행 과정 / 다음 방향**은 이 README를 기준으로 계속 갱신합니다.  
+> 기능 단위가 끝날 때마다 아래 「개발 현황」과 관련 절을 업데이트하세요.
+
+---
+
+## 개발 현황 (살아있는 로그)
+
+### 현재 상태 (2026-07-26)
+
+| 영역 | 상태 | 비고 |
+|------|------|------|
+| 네이버 수요 (오픈API 쇼핑 + 검색광고) | **Live** | `NAVER_CLIENT_*`, `NAVER_SEARCHAD_*` |
+| 주간 자동 발굴 (시드 키워드 → 일괄 스캔) | **Live** | `/recommendations` 「이번 주 추천 새로고침」 |
+| 연관 키워드 확장 | **Live(선택)** | 검색광고 연관어, 체크 시 |
+| 1688 공급 자동검색 | **미구현** | 스텁 오퍼 |
+| 1688 실원가 | **반자동** | URL + 수동 CNY (페이지 파싱 자주 실패) |
+| **시장성 판정** (최소가 vs 경쟁×1.15) | **완료** | SELL / 합배송필요 / 비추천 · 네이버 실시세 |
+| 쿠팡 / 알리 / 타오바오 발굴 | **확장 스텁만** | |
+| Amazon US 소싱·초안 | **동작** | 차단 시 폴백 초안 |
+| AI 문구 (Gemini) | **선택** | 한도 초과 시 템플릿 폴백 · 점수는 코드 |
+| 채널 등록 SS/쿠팡 | **키 있으면 live / 없으면 스텁** | |
+| 주문·배대지·수익분석 | **골격+스텁** | |
+| SaaS 빌링·멀티유저 | **미착수** | |
+
+### 진행 과정 (최근)
+
+1. 발굴 MVP 골격 (네이버↔1688 스텁 + 규칙 점수)
+2. Gemini 연동 (추천 이유·상세 문구만)
+3. **네이버 실데이터** — 쇼핑검색 + 검색광고 검색량
+4. **1688 URL → 실원가** (자동 파싱 실패 시 수동 CNY)
+5. **주간 자동 발굴** — 카테고리 시드 → (선택) 연관어 확장 → 추천 목록
+6. 스캔 결과 표 + NEW 배지, PENDING 자동 교체
+7. 추천 **무시 / 삭제 / 일괄 정리**
+8. **시장성 판정** — 가짜 경쟁가(발굴 추정가) 제거, 네이버 시세 + 합배송 시나리오
+
+### 다음 방향 (우선순위)
+
+1. **1688 키워드 자동검색** — URL 수동 입력 줄이기  
+2. 시드/확장 고도화 (데이터랩·시즌 캘린더)  
+3. 발굴 점수에 시장성(SELL/비추천) 반영  
+4. 채널 API 실키 운영, 자동주문·배대지 live  
+5. SaaS (로그인·빌링·테넌트 격리) · 배포
+
+### 목표 스펙 vs 지금 (발굴)
+
+목표: AI가 네이버·쿠팡·알리·타오바오·1688을 분석해 「이번 주 잘 팔릴 상품」을 추천.
+
+| 목표 | 지금 |
+|------|------|
+| 키워드 없이 자동 추천 | 시드(+연관) 일괄 스캔으로 근접 |
+| 5개 몰 실분석 | 네이버 live · 1688 반자동 · 나머지 스텁 |
+| 경쟁·판매량·마진·계절·리뷰·검색량 | 검색량·경쟁 live / 리뷰·평점 중성값 / 마진은 원가 규칙 / 판매량은 추정 |
+
+---
 
 ## 제품 단계
 
 | Step | 기능 | 상태 |
 |------|------|------|
 | 0 | SaaS DB/ERD (tenants, products, orders, shipments, AI) | **완료** |
-| ① | AI 상품 발굴 MVP (네이버 키워드 ↔ 1688 원가, 규칙 점수) | **완료** |
-| ② | AI 상세페이지 제작 (URL → 제목/키워드/상세/옵션/번역) | **완료** |
-| 1 | 규칙 추천 + GPT 이유/상세 + 원클릭 초안 | **완료** |
-| 2 | 주문 관리 + 자동주문 파이프라인(1688 스텁·결제 게이트) | **완료** |
-| 3 | 배대지 + 송장 자동등록 어댑터 | **완료** |
-| 4 | AI 수익분석 대시보드 + 운영 비서 | **완료** |
+| ① | AI 상품 발굴 (시드 자동스캔 + 네이버 live + 1688 실원가) | **진행 중** |
+| ② | AI 상세페이지 제작 | **완료** (키 없으면 템플릿) |
+| 1 | 규칙 추천 + AI 이유/상세 + 원클릭 초안 | **완료** |
+| 2 | 주문 관리 + 자동주문 파이프라인(1688 스텁·결제 게이트) | **골격** |
+| 3 | 배대지 + 송장 자동등록 어댑터 | **골격** |
+| 4 | AI 수익분석 대시보드 + 운영 비서 | **골격** |
 | 5 | SaaS 빌링 / 멀티유저 고도화 | 미착수 |
 
-기존 Phase 1–2 유지: URL/엑셀 초안, 승인→SmartStore/Coupang 등록(키 없으면 스텁), 가격·재고 동기화+스케줄러.
+기존 유지: Amazon URL/엑셀 초안, 승인→SmartStore/Coupang 등록(키 없으면 스텁), 가격·재고 동기화+스케줄러.
 
 ## 기술 스택
 
 - Next.js App Router + Tailwind
 - PostgreSQL + Prisma 7 (`prisma.config.ts`, `@prisma/adapter-pg`, client: `src/generated/prisma`)
 - Vitest
+- AI: Gemini (`GEMINI_API_KEY`) — 점수·KPI는 코드, 문구만 AI
 
 ## Step 0 — SaaS ERD 요약
 
@@ -106,213 +162,149 @@ http://localhost:3000
 | 변수 | 설명 |
 |------|------|
 | `DATABASE_URL` | PostgreSQL |
-| `USD_TO_KRW` / `MARGIN_RATE` / `CHINA_SHIPPING_FEE_KRW` / `INTL_SHIPPING_FEE_KRW` / `CARD_FEE_RATE` / `COMPETITOR_UNDERCUT_RATE` 등 | AI 추천 판매가·PriceRule 폴백 |
+| `USD_TO_KRW` / `MARGIN_RATE` / `SHIPPING_FEE_KRW` / `CHINA_SHIPPING_FEE_KRW` / `INTL_SHIPPING_FEE_KRW` / `CARD_FEE_RATE` 등 | 초안·추천 판매가 (배송비는 배대지 실견적 기준으로 조정) |
 | `SMARTSTORE_*` / `COUPANG_*` | 채널 API (없으면 스텁) |
-| `CRON_SECRET` | 배치 동기화 보호 |
-| `GEMINI_API_KEY` / `GEMINI_MODEL` | AI 상세·발굴 이유·운영 비서 (Gemini, 없으면 템플릿 폴백). `npm run ai:import-gemini`로 9ruTrip에서 가져오기 가능 |
-| `DISCOVER_*` / `CNY_TO_KRW` | ① 발굴 어댑터·원가 환산 (기본 스텁) |
-| `CHINA_MALL_ADAPTER` / `AUTO_ORDER_*` / `FORWARDER_ADDRESS_*` | Step 2 자동주문 파이프라인 (기본 stub, 결제 게이트) |
-| `FORWARDER_ADAPTER` 등 | Step 3 배대지 (기본 stub) |
+| `CRON_SECRET` | 배치 보호 |
+| `GEMINI_API_KEY` / `GEMINI_MODEL` / `AI_PROVIDER` | 문구용 Gemini (`npm run ai:import-gemini`) |
+| `NAVER_CLIENT_ID` / `NAVER_CLIENT_SECRET` | 네이버 오픈API 쇼핑검색 |
+| `NAVER_SEARCHAD_ACCESS_KEY` / `SECRET_KEY` / `CUSTOMER_ID` | 검색광고 월간 검색량·연관어 |
+| `DISCOVER_NAVER_MODE` | `auto`(키 있으면 live) / `stub` / `live` |
+| `DISCOVER_*` / `CNY_TO_KRW` / `DISCOVER_WEEKLY_*` | 발굴·주간 스캔 |
+| `CHINA_MALL_ADAPTER` / `AUTO_ORDER_*` / `FORWARDER_*` | 자동주문·배대지 (기본 stub) |
 
-## 동기화 스케줄러
+## 동기화·배치
 
 ```bash
 npm run sync:scheduler
-# 또는
-curl -X POST http://localhost:3000/api/cron/sync
+# POST /api/cron/sync
+# POST /api/cron/morning-report
+# POST /api/cron/discover-weekly   # 주간 자동 발굴 (CRON_SECRET)
 ```
 
-## ① AI 상품 발굴 MVP (Naver ↔ 1688)
+## ① AI 상품 발굴 (Naver ↔ 1688)
 
-점수는 **코드 규칙**(`src/lib/discover/score.ts`)이 계산합니다. GPT는 추천 이유 문구만 담당합니다.
+점수는 **코드 규칙**(`src/lib/discover/score.ts`). Gemini는 추천 이유 문구만 (한도 시 템플릿).
+
+### UI (`/recommendations`)
+
+1. **이번 주 자동 발굴** — 카테고리 시드 일괄 스캔 (+ 연관 확장 옵션)  
+   - 스캔 결과 표 (반영/미달/실패)  
+   - 이번 결과만 남기고 이전 PENDING 발굴 자동 무시  
+2. **키워드 수동 발굴** — 특정 키워드 검증  
+3. **1688 실원가 붙이기** — 실 URL + (필요 시) 수동 CNY  
+4. **정리** — STUB 무시 / 상위 20 / 대기 무시 / **무시된 항목 삭제** / 카드별 삭제  
+5. 원클릭 초안 → `/drafts/:id` (검수완료 → 승인 → 등록)
+
+### CLI
 
 ```bash
-# CLI
 npm run discover:keyword -- "무선선풍기"
+npm run discover:weekly -- seasonal_home --limit=2
+npm run discover:weekly -- all --expand
+npx tsx scripts/smoke-naver-demand.ts 무선선풍기
 npm run smoke:discover
-
-# UI: /recommendations → 「키워드로 발굴」
-# API:
-# POST /api/discover { "keyword": "무선선풍기" }
-# GET  /api/discover
 ```
 
-흐름: 수요 어댑터(네이버 스텁) + 공급 어댑터(1688 스텁) → `product_candidates` upsert → 규칙 점수 → `ai_recommendations` 생성 → UI.  
-수락 시 Amazon fetch 없이 후보 메타데이터로 `ProductDraft`를 만듭니다.  
-쿠팡/Ali/타오바오는 확장 스텁만 두었습니다(`DISCOVER_*_ADAPTER`). 라이브 크롤은 Playwright 이후 단계입니다.
+### API
 
-## AI 가격 결정 (추천 판매가)
+```text
+POST /api/discover              { "keyword": "무선선풍기" }
+POST /api/discover/weekly       { "category": "all", "expandRelated": true, "replacePending": true }
+POST /api/recommendations/:id/supply-url   { "supplyUrl": "https://detail.1688.com/offer/....html", "costPriceCny": 23 }
+POST /api/recommendations/:id/accept|ignore|unignore|delete
+POST /api/recommendations/cleanup   { "mode": "pending"|"pending_stub"|"keep_top"|"purge_ignored" }
+GET|POST /api/cron/discover-weekly
+```
 
-원가 + 중국/국제배송 + 관세 + 대행수수료에 마진을 얹고, 카드·플랫폼 수수료를 보정한 뒤 **경쟁상품 가격 밴드**로 클램프합니다. 숫자는 `src/lib/pricing/recommend.ts` 규칙 엔진이 계산합니다 (GPT 불필요).
+시드 키워드: `src/lib/discover/seed-keywords.ts`  
+네이버 live: `src/lib/discover/demand/naver-live.ts`  
+1688 URL: `src/lib/discover/supply/fetch-1688-offer.ts`
+
+### 가격이 두 갈래인 이유
+
+| | 발굴 카드 | 초안 판매가 |
+|--|-----------|-------------|
+| 용도 | 빠른 스크리닝 | 등록용 cost-plus |
+| 계산 | 원가×환율×`DISCOVER_LANDED_MULTIPLIER` + 목표마진 | 원가+국제배송+대행+관세+수수료+마진 |
+| 기본 배송 | 배수에 포함 | `SHIPPING_FEE_KRW` 등 (기본 1.5만원 → 소형엔 과할 수 있음) |
+
+## AI 가격 결정 (추천 판매가 + 시장성)
+
+원가 + 중국/국제배송 + 관세 + 대행수수료에 마진을 얹고, 카드·플랫폼 수수료를 보정한 뒤 **경쟁상품 가격 밴드**로 클램프합니다. (`src/lib/pricing/recommend.ts`)
+
+추가로 **시장성 판정** (`src/lib/pricing/viability.ts`):
+
+```
+최소판매가 ≤ 경쟁평균 × MARKET_CEILING_RATE(1.15)  → SELL
+합배송(N건) 가정 최소가만 천장 이하               → NEED_CONSOLIDATION
+그 외                                              → NOT_RECOMMENDED
+경쟁가 없음                                        → NO_MARKET_DATA
+```
+
+발굴 후보→초안 생성 시 경쟁가는 **네이버 쇼핑 최저가 샘플**만 사용합니다.  
+발굴 추정 판매가(예: 9,800원)를 경쟁가로 넣지 않습니다.
 
 ```bash
-# UI: /pricing 또는 초안 상세의 「AI 가격 결정」
-# API:
+# UI: /pricing 또는 초안 「AI 가격 결정」— 시장성 배너 표시
 # POST /api/pricing/recommend
-# {
-#   "cost": 20000,
-#   "chinaShipping": 3000,
-#   "intlShipping": 12000,
-#   "dutyRate": 0.08,
-#   "cardFeeRate": 0.025,
-#   "platformFeeRate": 0.1,
-#   "competitors": [59000, 62000, 65000],
-#   "applyDraftId": "optional-draft-id"
-# }
 ```
-
-전략: cost-plus → 경쟁 평균보다 소폭 낮게 맞춤(마진 여유 시). 여유 없으면 최소 마진(`MIN_MARGIN_RATE`)으로 클램프. 경쟁가 없으면 cost-plus 그대로.
 
 ## Step 1 — 추천 (Amazon / 기존 상품)
 
 ```bash
 npm run recommend:generate
-# 또는 UI: /recommendations (Amazon URL / 기존 스캔)
-# API:
-# POST /api/recommendations { "generate": true }
-# POST /api/recommendations { "url": "https://www.amazon.com/dp/..." }
-# POST /api/recommendations/:id/accept  → 초안 생성/연결
-# POST /api/recommendations/:id/ignore
+# UI: /recommendations (Amazon URL / 기존 스캔)
 ```
-
-점수는 `src/lib/recommend/score.ts` 규칙 엔진이 계산합니다. `GEMINI_API_KEY`가 있으면 이유/상세만 Gemini, 없으면 템플릿 폴백.
 
 ## ② AI 상세페이지 제작
 
-상품 URL 1개 → 한국어 제목·SEO 키워드·SmartStore형 상세 HTML·옵션명 번역·번역 메모를 생성합니다. GPT는 **콘텐츠만** 담당하며, 키가 없으면 구매대행 고지/혜택/스펙/FAQ 포함 템플릿으로 폴백합니다.
-
 ```bash
 npm run smoke:ai-detail
-# UI: /ai-detail  (미리보기 → 초안 저장)
-#     /drafts/:id → 「AI 상세 재생성」
-# API:
-# POST /api/ai/detail { "url": "https://www.amazon.com/dp/..." }
-# POST /api/ai/detail { "url": "...", "save": true }
-# POST /api/drafts { "url": "...", "generateAi": true }
-# POST /api/drafts/:id/ai-detail
+# UI: /ai-detail , /drafts/:id 「AI 상세 재생성」
 ```
 
-결과는 `ProductDraft`의 `titleKo` / `keywords` / `detailHtml` / `options` / `noticeText` / `aiMeta`에 저장됩니다. 추천 수락 시 새 초안에도 AI 상세를 적용합니다.
-
-## Step 2 — 주문 / 자동주문 파이프라인 (1688)
-
-주문 유입 → 1688 소싱 → 장바구니 → **결제 확인 게이트** → 결제 → 배대지 주소 → 완료.
+## Step 2 — 주문 / 자동주문 (1688)
 
 상태: `PENDING` → `SOURCING` → `CART_READY` → `AWAITING_PAYMENT_CONFIRM` → `PAID` → `FORWARDER_ADDRESS_SET` → `PURCHASE_COMPLETE`
 
+기본 스텁 (`AUTO_ORDER_ADAPTER=stub`). 결제 게이트 필수.
+
 ```bash
-# DB (enum + order_events)
 npm run db:apply:auto-order
-# 또는 prisma db push / generate
-
-# 스모크 (DB 필요)
 npm run smoke:auto-order
-
-# UI: /orders/:id  — 파이프라인 체크리스트 · 자동주문 시작 · 결제 확인 후 계속 · 이벤트 로그
-# API:
-# POST /api/orders
-# GET  /api/orders/:id                    # events 포함
-# POST /api/orders/:id/auto-order/start   # 결제 게이트까지
-# POST /api/orders/:id/auto-order/confirm-payment  { "confirmPayment": true }
-# POST /api/orders/:id/purchase           # 레거시 라인 스텁
+# UI: /orders/:id
 ```
 
-**기본은 스텁**입니다 (`AUTO_ORDER_ADAPTER=stub`). 라이브 1688/Playwright는 `AUTO_ORDER_LIVE=true` + `AUTO_ORDER_ADAPTER=live-hook` 일 때만 훅이 열리며, 미구성 시에도 실결제 없이 스텁으로 폴백합니다.  
-결제 단계는 스텁에서도 `confirmPayment: true`(또는 `AWAITING_PAYMENT_CONFIRM` 게이트) 없이는 진행되지 않습니다. 쿠키/비밀번호는 커밋하지 마세요 — `.env.example` 플레이스홀더만 사용합니다.  
-배대지 주소: `FORWARDER_ADDRESS_*` env.
-
-## Step 3 — 배대지 / 송장 자동등록
-
-```
-배대지 연동 (입고 → 출고 → 송장번호 수집)
-        ↓
-스마트스토어 / 쿠팡 / 11번가
-        ↓
-자동 송장 등록
-```
+## Step 3 — 배대지 / 송장
 
 ```bash
-# UI: /shipments  (배대지 동기화 · 송장 채널등록 · 전체 동기화)
-# POST /api/shipments { "orderId": "..." }
-# POST /api/shipments/:id/sync-forwarder
-# POST /api/shipments/:id/register-invoice { "channels": ["SMARTSTORE","COUPANG","ELEVENST"] }
-# POST /api/shipments/sync-all
-# POST /api/shipments/:id/track
-# POST /api/shipments/:id/invoice   # legacy alias → register-invoice
-```
-
-환경 변수 (`.env.example`):
-
-| 변수 | 설명 |
-|------|------|
-| `FORWARDER_ADAPTER` | `stub`(기본) / `live` |
-| `FORWARDER_API_URL` 또는 `FORWARDER_API_BASE` | 배대지 API 베이스 |
-| `FORWARDER_API_KEY` | 배대지 API 키 |
-| `ELEVENST_API_KEY` / `ELEVENST_API_URL` | 11번가 송장 live용 (없으면 스텁) |
-
-키 없이 `StubForwarderAdapter`로 입고·출고·국내송장까지 결정적으로 데모됩니다. 채널 송장도 키 없으면 스텁으로 채널별 상태가 `channelInvoicePayload.channels`에 기록됩니다.
-
-```bash
-npm run db:apply:elevenst   # Channel enum에 ELEVENST 추가 (필요 시)
 npm run smoke:forwarder-invoice
+# UI: /shipments
 ```
+
+키 없으면 스텁. 11번가: `ELEVENST_*`.
 
 ## Step 4 — 수익분석 / 운영 비서
 
 ```bash
-# UI: /analytics?period=today|7d|30d|all
-# GET  /api/analytics?period=today
-# POST /api/analytics/assistant { "question": "오늘 KPI 요약", "period": "today" }
-# GET  /api/analytics/assistant
+# UI: /analytics
 # GET|POST /api/analytics/morning-report
 ```
 
-집계는 `src/lib/analytics/metrics.ts`가 DB에서 수행합니다. GPT는 스냅샷 JSON만 설명하며, 키 없으면 템플릿 요약으로 `ai_conversations`에 저장합니다.
-
-### 자동 집계 KPI (기본: 오늘, Asia/Seoul)
-
-| 지표 | 공식 |
-|------|------|
-| 판매 건수 | `orders` 수 (`CANCELLED` 제외, 기간 `orderedAt`) |
-| 매출 | `sum(subtotalKrw)` |
-| 순이익 | `sum(profitKrw)` |
-| 광고비 | `sum(ad_spends.amountKrw)` (기간 `date`) |
-| ROI | `순이익 / 광고비` (비율, UI는 ×100%) — 광고비 0이면 0 |
-| 환불률 | 환불 주문 수 / 판매 건수 (`REFUNDED` 또는 `refundedKrw > 0`) |
-
-데모: `npx tsx scripts/apply-ad-spend-migration.ts` → `npm run db:seed` → `/analytics`
+KPI는 DB 집계, Gemini는 설명 문구만.
 
 ## 주요 API (현재)
 
-- `POST /api/drafts` `{ "url": "https://www.amazon.com/dp/ASIN", "generateAi"?: true }`
-- `POST /api/ai/detail` `{ "url": "...", "save"?: true }`
-- `POST /api/drafts/:id/ai-detail`
-- `POST /api/drafts/import` (multipart `file`)
-- `POST /api/drafts/:id/approve`
-- `POST /api/drafts/:id/publish`
-- `POST /api/drafts/:id/sync`
-- `GET|POST /api/discover` `{ "keyword": "..." }`
-- `POST /api/pricing/recommend` `{ cost, chinaShipping?, intlShipping?, competitors?, applyDraftId? }`
-- `GET|POST /api/recommendations`
-- `POST /api/recommendations/:id/accept|ignore`
-- `GET|POST /api/orders`
-- `GET|PATCH /api/orders/:id` (GET에 `events` 포함)
-- `POST /api/orders/:id/auto-order/start`
-- `POST /api/orders/:id/auto-order/confirm-payment` `{ "confirmPayment": true }`
-- `POST /api/orders/:id/purchase`
-- `GET|POST /api/shipments`
-- `POST /api/shipments/:id/sync-forwarder`
-- `POST /api/shipments/:id/register-invoice`
-- `POST /api/shipments/sync-all`
-- `POST /api/shipments/:id/track|invoice`
-- `GET /api/analytics`
-- `GET|POST /api/analytics/assistant`
-- `GET|POST /api/analytics/morning-report`
-- `GET|POST /api/cron/morning-report`
-
+- `POST /api/drafts` · `POST /api/ai/detail` · `POST /api/drafts/:id/ai-detail|approve|publish|sync`
+- `GET|POST /api/discover` · `POST /api/discover/weekly`
+- `POST /api/recommendations/:id/accept|ignore|unignore|delete|supply-url`
+- `POST /api/recommendations/cleanup`
+- `POST /api/pricing/recommend`
+- `GET|POST /api/orders` · auto-order start/confirm-payment
+- `GET|POST /api/shipments` · sync-forwarder · register-invoice
+- `GET /api/analytics` · assistant · morning-report
+- `GET|POST /api/cron/sync` · `morning-report` · `discover-weekly`
 - `GET /api/channels/status`
-- `GET|POST /api/cron/sync`
-- `GET /api/templates/excel`
 
 ## 테스트
 
@@ -325,10 +317,13 @@ npm run smoke:shipment
 npm run smoke:forwarder-invoice
 npm run smoke:analytics
 npm run smoke:discover
+npm run smoke:gemini
+npx tsx scripts/smoke-naver-demand.ts 무선선풍기
 ```
 
-## Stage 5 (남은 일)
+## Stage 5 (남은 일 · SaaS)
 
 - 빌링/구독, 테넌트별 API 키 저장
 - 세션/초대 기반 멀티유저 UI
 - 프로덕션 RLS 또는 미들웨어 강제 테넌트 격리
+- 배포 (Docker/클라우드) + cron 운영

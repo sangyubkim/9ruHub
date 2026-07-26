@@ -31,6 +31,7 @@
     "smoke:discover": "tsx scripts/smoke-discover.ts",
     "report:morning": "tsx scripts/smoke-morning-report.ts",
     "discover:keyword": "tsx scripts/discover-keyword.ts",
+    "discover:weekly": "tsx scripts/discover-weekly.ts",
     "recommend:generate": "tsx scripts/generate-recommendations.ts",
     "sync:scheduler": "tsx scripts/sync-scheduler.ts",
     "postinstall": "prisma generate"

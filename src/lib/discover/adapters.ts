@@ -1,16 +1,23 @@
 import { CoupangDemandStubAdapter } from "@/lib/discover/demand/coupang-stub";
+import {
+  NaverDemandLiveAdapter,
+  shouldUseNaverLiveDemand,
+} from "@/lib/discover/demand/naver-live";
 import { NaverDemandStubAdapter } from "@/lib/discover/demand/naver-stub";
 import { AliExpressSupplyStubAdapter } from "@/lib/discover/supply/aliexpress-stub";
 import { Mall1688SupplyStubAdapter } from "@/lib/discover/supply/mall1688-stub";
 import { TaobaoSupplyStubAdapter } from "@/lib/discover/supply/taobao-stub";
 import type { DemandMallAdapter, SupplyMallAdapter } from "@/lib/discover/types";
 
-/** MVP 기본: 네이버 수요 */
+/** MVP 기본: 네이버 수요 (키 있으면 live, 없으면 stub) */
 export function getDemandAdapter(): DemandMallAdapter {
   const mode = (process.env.DISCOVER_DEMAND_ADAPTER ?? "naver").toLowerCase();
   if (mode === "coupang") {
     console.warn("Coupang demand is extension stub only");
     return new CoupangDemandStubAdapter();
+  }
+  if (shouldUseNaverLiveDemand()) {
+    return new NaverDemandLiveAdapter();
   }
   return new NaverDemandStubAdapter();
 }
