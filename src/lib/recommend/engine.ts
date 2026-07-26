@@ -3,8 +3,13 @@ import {
   ProductStatus,
   SourceMall,
 } from "@/generated/prisma/client";
+import { isAmazonFallbackTitle } from "@/lib/amazon/fallback";
 import { prisma } from "@/lib/db";
 import { calculateSalePrice, defaultPriceRuleFromEnv } from "@/lib/price-engine";
+import {
+  enrichAmazonMarket,
+  priceAmazonUsProduct,
+} from "@/lib/recommend/amazon-enrich";
 import { withAmazonScoreFeatures } from "@/lib/recommend/amazon-features";
 import { generateRecommendCopy } from "@/lib/recommend/openai";
 import {
@@ -80,6 +85,8 @@ export async function generateRecommendationsForTenant(options?: {
         OR: [
           { title: { contains: "도매 오퍼" } },
           { titleKo: { contains: "도매 오퍼" } },
+          { title: { contains: "[초안] Amazon US" } },
+          { titleKo: { contains: "[초안] Amazon US" } },
           { sourceUrl: { contains: "1688.com" } },
         ],
       },
@@ -92,6 +99,12 @@ export async function generateRecommendationsForTenant(options?: {
 
   for (const product of products) {
     if (created.length >= limit) break;
+    if (
+      isAmazonFallbackTitle(product.title) ||
+      isAmazonFallbackTitle(product.titleKo)
+    ) {
+      continue;
+    }
 
     const existing = await prisma.aiRecommendation.findFirst({
       where: {
@@ -103,11 +116,14 @@ export async function generateRecommendationsForTenant(options?: {
     if (existing) continue;
 
     const sourcePriceUsd = Number(product.sourcePrice);
-    const priced = await resolveCostAndSale(
-      tenantId,
-      sourcePriceUsd,
-      product.salePriceKrw,
-      product.costKrw,
+    const priced = await priceAmazonUsProduct(tenantId, sourcePriceUsd);
+    const market = await enrichAmazonMarket(
+      {
+        title: product.title,
+        brand: product.brand,
+        isFallback: false,
+      },
+      priced,
     );
 
     const breakdown = scoreCandidate({
@@ -128,6 +144,14 @@ export async function generateRecommendationsForTenant(options?: {
       breakdown,
       priced,
       sourcePriceUsd,
+      {
+        intlShippingKrw: priced.intlShippingKrw,
+        competitorAvgKrw: market.competitorAvgKrw,
+        minViableSaleKrw: priced.minViableSaleKrw,
+        marketVerdict: market.marketVerdict,
+        isFallback: false,
+        naverKeyword: market.keyword,
+      },
     );
 
     const copy = await generateRecommendCopy({
@@ -179,10 +203,12 @@ export async function createRecommendationFromUrl(
 
   const resolvedTenantId = tenantId ?? (await getDefaultTenantId());
   const fetched = await fetchAmazonUsProduct(url);
-  const priced = await resolveCostAndSale(
+  const priced = await priceAmazonUsProduct(
     resolvedTenantId,
     fetched.sourcePrice,
+    fetched.weightGrams,
   );
+  const market = await enrichAmazonMarket(fetched, priced);
 
   const sourceProduct = await prisma.sourceProduct.upsert({
     where: {
@@ -274,33 +300,60 @@ export async function createRecommendationFromUrl(
     breakdown,
     priced,
     sourcePriceUsd,
+    {
+      intlShippingKrw: priced.intlShippingKrw,
+      competitorAvgKrw: market.competitorAvgKrw,
+      minViableSaleKrw: priced.minViableSaleKrw,
+      marketVerdict: market.marketVerdict,
+      isFallback: fetched.isFallback,
+      naverKeyword: market.keyword,
+    },
   );
 
-  const copy = await generateRecommendCopy({
-    title: product.titleKo ?? product.title,
-    brand: product.brand,
-    sourceUrl: product.sourceUrl,
-    sourcePriceUsd,
-    salePriceKrw: priced.salePriceKrw,
-    costKrw: priced.costKrw,
-    inStock: product.inStock,
-    score: breakdown.total,
-    scoreBreakdown: breakdown,
-  });
+  let reasonCode = reasonCodeFromScore(breakdown.total);
+  let score = breakdown.total;
+  let reasonText: string;
+  let detailHtml: string;
+  let usedGpt = false;
 
-  return prisma.aiRecommendation.create({
+  if (fetched.isFallback) {
+    reasonCode = "FALLBACK";
+    score = 0;
+    reasonText =
+      "Amazon 페이지에서 실제 제목·가격을 가져오지 못했습니다. 표시된 $29.99는 임시값입니다. 원본에서 실가를 확인한 뒤 URL을 다시 넣거나 초안에서 원가를 수정하세요.";
+    detailHtml =
+      "<section><h2>가격 확인 필요</h2><p>Amazon 차단/파싱 실패로 폴백 카드입니다. 실상품·실가로 재분석하세요.</p></section>";
+  } else {
+    const copy = await generateRecommendCopy({
+      title: product.titleKo ?? product.title,
+      brand: product.brand,
+      sourceUrl: product.sourceUrl,
+      sourcePriceUsd,
+      salePriceKrw: priced.salePriceKrw,
+      costKrw: priced.costKrw,
+      inStock: product.inStock,
+      score: breakdown.total,
+      scoreBreakdown: breakdown,
+    });
+    reasonText = copy.reasonText;
+    detailHtml = copy.detailHtml;
+    usedGpt = copy.usedGpt;
+  }
+
+  const row = await prisma.aiRecommendation.create({
     data: {
       tenantId: resolvedTenantId,
       productId: product.id,
       sourceUrl: product.sourceUrl,
       externalId: product.externalId,
       title: product.titleKo ?? product.title,
-      score: breakdown.total,
-      scoreBreakdown: toJson(scorePayload),
+      score,
+      scoreBreakdown: toJson({ ...scorePayload, total: score }),
       status: "PENDING",
-      reasonCode: reasonCodeFromScore(breakdown.total),
-      reasonText: copy.reasonText,
-      detailHtml: copy.detailHtml,
+      reasonCode,
+      reasonText,
+      detailHtml,
     },
   });
+  return { ...row, usedGpt };
 }

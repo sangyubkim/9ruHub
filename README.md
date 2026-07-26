@@ -51,10 +51,11 @@
 14. **발굴 점수×시장성** — SELL +15 / 합배송 +5 / 비추천 −25·PASS 강등 · 카드에 판매가·경쟁가 강조
 15. **1688 실검색 안정화** — marketOffer API → HTML → Playwright · 선택 storageState 로그인
 16. **Amazon-first 전환** — 추천 UI 주력을 Amazon URL로, 1688 UI 기본 숨김
+17. **Amazon URL 추천 강화** — 몰테일 배송·네이버 시세·시장성 · 폴백($29.99) FALLBACK 배지
 
 ### 다음 방향 (우선순위)
 
-1. Amazon 소싱 UX·초안·몰테일 견적 안정화  
+1. Amazon 파싱 성공률(차단 회피) · PA-API 검토  
 2. 채널 API·등록 live · SaaS  
 3. 1688은 보류(해외 가입/제재) |
 

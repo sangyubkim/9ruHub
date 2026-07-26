@@ -1,5 +1,9 @@
 import * as cheerio from "cheerio";
 import {
+  AMAZON_FALLBACK_PRICE_USD,
+  amazonFallbackTitle,
+} from "@/lib/amazon/fallback";
+import {
   extractAmazonWeightFromDom,
   extractAmazonWeightGrams,
 } from "@/lib/product/parse-weight";
@@ -30,12 +34,14 @@ function fallbackProduct(asin: string, sourceUrl: string): FetchedProduct {
   return {
     asin,
     sourceUrl,
-    title: `[초안] Amazon US ${asin}`,
+    title: amazonFallbackTitle(asin),
     brand: null,
     currency: "USD",
-    sourcePrice: 29.99,
+    sourcePrice: AMAZON_FALLBACK_PRICE_USD,
     inStock: true,
-    images: [`https://images-na.ssl-images-amazon.com/images/P/${asin}.01.LZZZZZZZ.jpg`],
+    images: [
+      `https://images-na.ssl-images-amazon.com/images/P/${asin}.01.LZZZZZZZ.jpg`,
+    ],
     options: [
       { name: "Color", values: ["Default"] },
       { name: "Size", values: ["One Size"] },
@@ -45,11 +51,57 @@ function fallbackProduct(asin: string, sourceUrl: string): FetchedProduct {
   };
 }
 
-function parsePrice(text: string | undefined): number | null {
+export function parsePrice(text: string | undefined): number | null {
   if (!text) return null;
   const cleaned = text.replace(/[^0-9.]/g, "");
   const n = Number(cleaned);
   return Number.isFinite(n) && n > 0 ? n : null;
+}
+
+function looksLikeAmazonBlockPage(html: string): boolean {
+  return /api-services-support@amazon\.com|Enter the characters you see below|Robot Check|sorry, we just need to make sure you're not a robot/i.test(
+    html,
+  );
+}
+
+/** 여러 셀렉터·JSON에서 가격 후보를 뽑는다 */
+export function extractAmazonPriceFromHtml(
+  $: ReturnType<typeof cheerio.load>,
+  html: string,
+): number | null {
+  const candidates = [
+    $(".a-price[data-a-color='price'] .a-offscreen").first().text(),
+    $("#corePrice_feature_div .a-price .a-offscreen").first().text(),
+    $("#corePriceDisplay_desktop_feature_div .a-offscreen").first().text(),
+    $(".a-price .a-offscreen").first().text(),
+    $("#priceblock_ourprice").text(),
+    $("#priceblock_dealprice").text(),
+    $("#price_inside_buybox").text(),
+    $("input#twister-plus-price-data-price").attr("value"),
+    $("span[data-a-color='price'] .a-offscreen").first().text(),
+  ];
+
+  for (const c of candidates) {
+    const p = parsePrice(c ?? undefined);
+    if (p != null) return p;
+  }
+
+  const whole = $(".a-price-whole").first().text().replace(/[^0-9]/g, "");
+  const fraction = $(".a-price-fraction").first().text().replace(/[^0-9]/g, "");
+  if (whole) {
+    const p = parsePrice(`${whole}.${fraction || "00"}`);
+    if (p != null) return p;
+  }
+
+  const jsonPrice = html.match(
+    /"priceAmount"\s*:\s*([0-9]+(?:\.[0-9]+)?)/,
+  );
+  if (jsonPrice?.[1]) {
+    const p = parsePrice(jsonPrice[1]);
+    if (p != null) return p;
+  }
+
+  return null;
 }
 
 /**
@@ -81,6 +133,10 @@ export async function fetchAmazonUsProduct(inputUrl: string): Promise<FetchedPro
     }
 
     const html = await res.text();
+    if (looksLikeAmazonBlockPage(html)) {
+      return fallbackProduct(asin, sourceUrl);
+    }
+
     const $ = cheerio.load(html);
 
     const title =
@@ -93,11 +149,7 @@ export async function fetchAmazonUsProduct(inputUrl: string): Promise<FetchedPro
       $("a#brand").text().trim() ||
       null;
 
-    const price =
-      parsePrice($(".a-price .a-offscreen").first().text()) ??
-      parsePrice($("#priceblock_ourprice").text()) ??
-      parsePrice($("#priceblock_dealprice").text()) ??
-      parsePrice($("#corePrice_feature_div .a-offscreen").first().text());
+    const price = extractAmazonPriceFromHtml($, html);
 
     const images = new Set<string>();
     const landing = $("#landingImage").attr("src") || $("#imgTagWrapperId img").attr("src");

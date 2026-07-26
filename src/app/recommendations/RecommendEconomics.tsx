@@ -23,12 +23,15 @@ const LABEL_PILL: Record<string, string> = {
   BUY: "bg-sky-600 text-white",
   WATCH: "bg-zinc-600 text-white",
   PASS: "bg-zinc-400 text-white",
+  SKIP: "bg-zinc-400 text-white",
+  FALLBACK: "bg-red-700 text-white",
 };
 
 export function RecommendEconomics({
   score,
   reasonCode,
   isStub,
+  isFallback,
   costCny,
   costUsd,
   sellKrw,
@@ -43,6 +46,8 @@ export function RecommendEconomics({
   score: number;
   reasonCode?: string | null;
   isStub?: boolean;
+  /** Amazon 파싱 실패 — $29.99 임시값 */
+  isFallback?: boolean;
   costCny?: number | null;
   /** Amazon 경로 원가(USD). CNY가 없을 때 원가 칸에 표시 */
   costUsd?: number | null;
@@ -57,6 +62,7 @@ export function RecommendEconomics({
 }) {
   const verdictCode = marketVerdict?.code;
   const label = reasonCode ?? "—";
+  const fallback = Boolean(isFallback || reasonCode === "FALLBACK");
 
   return (
     <div className="mt-4 space-y-3">
@@ -73,12 +79,23 @@ export function RecommendEconomics({
             시장성 {marketVerdict?.label ?? verdictCode}
           </span>
         ) : null}
+        {fallback ? (
+          <span className="rounded-md bg-red-100 px-2.5 py-1 text-xs font-semibold text-red-900">
+            가격 미확인(폴백)
+          </span>
+        ) : null}
         {isStub ? (
           <span className="rounded-md bg-orange-100 px-2.5 py-1 text-xs font-semibold text-orange-900">
             STUB
           </span>
         ) : null}
       </div>
+      {fallback ? (
+        <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-900">
+          Amazon에서 실가격을 못 가져와 $29.99 임시값으로 계산된 카드입니다.
+          원본 가격을 확인한 뒤 URL을 다시 넣어 주세요.
+        </p>
+      ) : null}
 
       <div className="grid gap-3 rounded-xl border-2 border-sky-200 bg-sky-50/70 p-4 sm:grid-cols-[1.2fr_1fr]">
         <div>

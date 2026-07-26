@@ -19,11 +19,20 @@ describe("withAmazonScoreFeatures", () => {
       breakdown,
       { salePriceKrw: 27300, costKrw: 17745 },
       19.99,
+      {
+        intlShippingKrw: 18000,
+        competitorAvgKrw: 39900,
+        isFallback: false,
+        naverKeyword: "AirPods Pro",
+      },
     );
     expect(out.features.sellPriceKrw).toBe(27300);
     expect(out.features.sourceCostKrw).toBe(17745);
     expect(out.features.sourcePriceUsd).toBe(19.99);
     expect(out.features.marginRate).toBeCloseTo(0.35, 2);
+    expect(out.features.intlShippingKrw).toBe(18000);
+    expect(out.features.competitorAvgKrw).toBe(39900);
+    expect(out.features.isFallback).toBe(false);
     expect(out.total).toBe(78);
   });
 });

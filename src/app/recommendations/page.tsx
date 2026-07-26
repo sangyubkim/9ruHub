@@ -36,8 +36,11 @@ function featureNumber(
 
 function readMarketVerdict(breakdown: unknown) {
   if (!breakdown || typeof breakdown !== "object") return null;
-  const v = (breakdown as { marketVerdict?: Record<string, unknown> })
-    .marketVerdict;
+  const root = breakdown as {
+    marketVerdict?: Record<string, unknown>;
+    features?: Record<string, unknown>;
+  };
+  const v = root.marketVerdict;
   if (!v || typeof v.code !== "string") return null;
   return {
     code: v.code,
@@ -58,6 +61,12 @@ function readMarketVerdict(breakdown: unknown) {
         ? v.consolidationUnits
         : undefined,
   };
+}
+
+function featureBool(breakdown: unknown, key: string): boolean {
+  if (!breakdown || typeof breakdown !== "object") return false;
+  const features = (breakdown as { features?: Record<string, unknown> }).features;
+  return features?.[key] === true;
 }
 
 type PageProps = {
@@ -207,14 +216,12 @@ export default async function RecommendationsPage({ searchParams }: PageProps) {
               featureNumber(item.scoreBreakdown, "sellPriceKrw") ??
               item.candidate?.sellPrice ??
               item.product?.salePriceKrw;
-            const minViable = featureNumber(
-              item.scoreBreakdown,
-              "minViableSaleKrw",
-            );
-            const competitorAvg = featureNumber(
-              item.scoreBreakdown,
-              "competitorAvgKrw",
-            );
+            const minViable =
+              featureNumber(item.scoreBreakdown, "minViableSaleKrw") ?? null;
+            const competitorAvg =
+              featureNumber(item.scoreBreakdown, "competitorAvgKrw") ??
+              readMarketVerdict(item.scoreBreakdown)?.competitorAvgKrw ??
+              null;
             const sourceCostKrw =
               featureNumber(item.scoreBreakdown, "sourceCostKrw") ??
               item.product?.costKrw;
@@ -223,6 +230,9 @@ export default async function RecommendationsPage({ searchParams }: PageProps) {
               "intlShippingKrw",
             );
             const marketVerdict = readMarketVerdict(item.scoreBreakdown);
+            const isFallbackCard =
+              featureBool(item.scoreBreakdown, "isFallback") ||
+              item.reasonCode === "FALLBACK";
 
             const candidateUrl =
               item.candidate?.supplyUrl ?? item.sourceUrl ?? null;
@@ -281,14 +291,17 @@ export default async function RecommendationsPage({ searchParams }: PageProps) {
                       score={Number(item.score)}
                       reasonCode={item.reasonCode}
                       isStub={isStubCard}
-                      costCny={cost}
-                      costUsd={costUsd}
-                      sellKrw={sell}
-                      minViableKrw={minViable}
+                      isFallback={isFallbackCard}
+                      costCny={isFallbackCard ? null : cost}
+                      costUsd={isFallbackCard ? null : costUsd}
+                      sellKrw={isFallbackCard ? null : sell}
+                      minViableKrw={isFallbackCard ? null : minViable}
                       competitorAvgKrw={competitorAvg}
-                      sourceCostKrw={sourceCostKrw}
-                      intlShippingKrw={intlShippingKrw}
-                      marginRate={margin}
+                      sourceCostKrw={isFallbackCard ? null : sourceCostKrw}
+                      intlShippingKrw={
+                        isFallbackCard ? null : intlShippingKrw
+                      }
+                      marginRate={isFallbackCard ? null : margin}
                       searchVolume={vol}
                       marketVerdict={marketVerdict}
                     />
