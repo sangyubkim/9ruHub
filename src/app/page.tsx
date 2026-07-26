@@ -70,25 +70,25 @@ export default async function HomePage() {
             href="/analytics"
             className="rounded-full bg-sky-800 px-5 py-2.5 text-sm font-medium text-white hover:bg-sky-900"
           >
-            수익분석 / 운영 비서
+            수익·운영
           </Link>
           <Link
             href="/recommendations"
             className="rounded-full border border-zinc-300 bg-white px-5 py-2.5 text-sm hover:border-sky-500"
           >
-            AI 발굴
+            상품 발굴
           </Link>
           <Link
             href="/ai-detail"
             className="rounded-full border border-zinc-300 bg-white px-5 py-2.5 text-sm hover:border-sky-500"
           >
-            AI 상세 제작
+            상세페이지
           </Link>
           <Link
             href="/drafts/new"
             className="rounded-full border border-zinc-300 bg-white px-5 py-2.5 text-sm hover:border-sky-500"
           >
-            URL 초안
+            URL로 등록
           </Link>
         </div>
       </section>
