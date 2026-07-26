@@ -3,6 +3,7 @@ import { parse1688CostFromHtml } from "./fetch-1688-offer";
 import {
   extract1688OfferId,
   is1688OfferUrl,
+  isFake1688StubDetailUrl,
   to1688OfferUrl,
 } from "./parse-1688-url";
 
@@ -14,6 +15,19 @@ describe("extract1688OfferId", () => {
     expect(extract1688OfferId("1234567890")).toBe("1234567890");
     expect(is1688OfferUrl("https://amazon.com/dp/B0")).toBe(false);
     expect(to1688OfferUrl("1234567890")).toContain("1234567890");
+  });
+
+  it("detects fake stub detail urls that 404", () => {
+    expect(
+      isFake1688StubDetailUrl(
+        "https://detail.1688.com/offer/1688-39661548.html",
+      ),
+    ).toBe(true);
+    expect(
+      isFake1688StubDetailUrl(
+        "https://detail.1688.com/offer/798161592540.html",
+      ),
+    ).toBe(false);
   });
 });
 
