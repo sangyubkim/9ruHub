@@ -289,12 +289,17 @@ export async function createRecommendationFromUrl(
   let usedGpt = false;
 
   if (fetched.isFallback) {
+    const { amazonFallbackReasonMessage } = await import(
+      "@/lib/amazon/fetch-product"
+    );
+    const failReason =
+      fetched.raw && typeof fetched.raw.reason === "string"
+        ? fetched.raw.reason
+        : undefined;
     reasonCode = "FALLBACK";
     score = 0;
-    reasonText =
-      "Amazon 페이지에서 실제 제목·가격을 가져오지 못했습니다. 표시된 $29.99는 임시값입니다. 원본에서 실가를 확인한 뒤 URL을 다시 넣거나 초안에서 원가를 수정하세요.";
-    detailHtml =
-      "<section><h2>가격 확인 필요</h2><p>Amazon 차단/파싱 실패로 폴백 카드입니다. 실상품·실가로 재분석하세요.</p></section>";
+    reasonText = `${amazonFallbackReasonMessage(failReason)} 표시된 $29.99는 임시값입니다. Chrome에서 보이는 실가를 초안에 직접 넣거나, 나중에 파싱이 될 때 URL을 다시 넣어 주세요.`;
+    detailHtml = `<section><h2>가격 확인 필요</h2><p>${amazonFallbackReasonMessage(failReason)}</p></section>`;
   } else {
     const copy = await generateRecommendCopy({
       title: product.titleKo ?? product.title,

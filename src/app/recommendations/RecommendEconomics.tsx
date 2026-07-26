@@ -122,8 +122,9 @@ export function RecommendEconomics({
       </div>
       {fallback ? (
         <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-900">
-          Amazon에서 실가격을 못 가져와 $29.99 임시값으로 계산된 카드입니다.
-          원본 가격을 확인한 뒤 URL을 다시 넣어 주세요.
+          Amazon이 앱 서버 요청을 차단하거나 가격 HTML을 못 읽어 $29.99
+          임시값입니다. 브라우저에 보이는 실가(예: $41.98)를 기준으로
+          초안에서 원가를 직접 수정하세요.
         </p>
       ) : null}
 

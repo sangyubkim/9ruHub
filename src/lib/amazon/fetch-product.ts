@@ -30,7 +30,18 @@ export type FetchedProduct = {
   raw?: Record<string, unknown>;
 };
 
-function fallbackProduct(asin: string, sourceUrl: string): FetchedProduct {
+export type AmazonFallbackReason =
+  | "amazon_robot_block"
+  | "http_error"
+  | "parse_missing_title_or_price"
+  | "fetch_error";
+
+function fallbackProduct(
+  asin: string,
+  sourceUrl: string,
+  reason: AmazonFallbackReason,
+  detail?: Record<string, unknown>,
+): FetchedProduct {
   return {
     asin,
     sourceUrl,
@@ -47,8 +58,25 @@ function fallbackProduct(asin: string, sourceUrl: string): FetchedProduct {
       { name: "Size", values: ["One Size"] },
     ],
     isFallback: true,
-    raw: { reason: "amazon_fetch_unavailable" },
+    raw: { reason, ...detail },
   };
+}
+
+export function amazonFallbackReasonMessage(
+  reason: string | undefined,
+): string {
+  switch (reason) {
+    case "amazon_robot_block":
+      return "Amazon이 서버 요청을 로봇으로 차단했습니다(브라우저에서는 보이지만 앱 fetch는 막힘).";
+    case "http_error":
+      return "Amazon HTTP 응답 오류로 상품 페이지를 받지 못했습니다.";
+    case "parse_missing_title_or_price":
+      return "페이지는 받았지만 제목/가격 HTML을 파싱하지 못했습니다.";
+    case "fetch_error":
+      return "Amazon 요청 중 네트워크/타임아웃 오류가 났습니다.";
+    default:
+      return "Amazon에서 실가격을 가져오지 못했습니다.";
+  }
 }
 
 export function parsePrice(text: string | undefined): number | null {
@@ -129,12 +157,17 @@ export async function fetchAmazonUsProduct(inputUrl: string): Promise<FetchedPro
     });
 
     if (!res.ok) {
-      return fallbackProduct(asin, sourceUrl);
+      return fallbackProduct(asin, sourceUrl, "http_error", {
+        status: res.status,
+      });
     }
 
     const html = await res.text();
-    if (looksLikeAmazonBlockPage(html)) {
-      return fallbackProduct(asin, sourceUrl);
+    if (looksLikeAmazonBlockPage(html) || html.length < 8000) {
+      return fallbackProduct(asin, sourceUrl, "amazon_robot_block", {
+        htmlLength: html.length,
+        status: res.status,
+      });
     }
 
     const $ = cheerio.load(html);
@@ -189,7 +222,11 @@ export async function fetchAmazonUsProduct(inputUrl: string): Promise<FetchedPro
     const inStock = !availability.includes("unavailable") && !availability.includes("out of stock");
 
     if (!title || !price) {
-      return fallbackProduct(asin, sourceUrl);
+      return fallbackProduct(asin, sourceUrl, "parse_missing_title_or_price", {
+        hasTitle: Boolean(title),
+        hasPrice: price != null,
+        htmlLength: html.length,
+      });
     }
 
     const weight =
@@ -221,7 +258,9 @@ export async function fetchAmazonUsProduct(inputUrl: string): Promise<FetchedPro
         weightRaw: weight?.raw ?? null,
       },
     };
-  } catch {
-    return fallbackProduct(asin, sourceUrl);
+  } catch (err) {
+    return fallbackProduct(asin, sourceUrl, "fetch_error", {
+      message: err instanceof Error ? err.message : String(err),
+    });
   }
 }
