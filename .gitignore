@@ -23,6 +23,9 @@
 # misc
 .DS_Store
 *.pem
+/secrets/
+tmp-1688.html
+scripts/debug-1688-html.ts
 
 # debug
 npm-debug.log*

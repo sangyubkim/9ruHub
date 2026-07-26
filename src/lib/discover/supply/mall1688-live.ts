@@ -20,6 +20,9 @@ export class Mall1688SupplyLiveAdapter implements SupplyMallAdapter {
     });
 
     if (result.offers.length > 0) {
+      console.info(
+        `[discover] 1688 live ok source=${result.source ?? "?"} hits=${result.hitCount}`,
+      );
       return result.offers;
     }
 
@@ -27,6 +30,7 @@ export class Mall1688SupplyLiveAdapter implements SupplyMallAdapter {
       "[discover] 1688 live search empty →",
       result.fetchError ?? "no_offers",
       result.searchUrl,
+      `source_tried=${result.source ?? "none"}`,
     );
 
     if (!this.fallbackToStub) {

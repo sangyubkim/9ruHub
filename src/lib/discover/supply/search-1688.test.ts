@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { build1688SearchUrl, parse1688SearchHtml } from "./search-1688";
+import {
+  build1688SearchUrl,
+  is1688LoginWallHtml,
+  parse1688SearchHtml,
+} from "./search-1688";
 
 describe("parse1688SearchHtml", () => {
   it("extracts offer ids, titles and prices from html fragments", () => {
@@ -21,6 +25,17 @@ describe("parse1688SearchHtml", () => {
   it("builds search url", () => {
     expect(build1688SearchUrl("无线风扇")).toContain(
       encodeURIComponent("无线风扇"),
+    );
+  });
+
+  it("detects alibaba login jump wall", () => {
+    expect(
+      is1688LoginWallHtml(
+        "_____tmd_____/page/login_jump login.taobao.com redirect",
+      ),
+    ).toBe(true);
+    expect(is1688LoginWallHtml("<div>offer/1234567890.html</div>")).toBe(
+      false,
     );
   });
 });

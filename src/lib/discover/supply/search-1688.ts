@@ -123,9 +123,16 @@ export function build1688MobileSearchUrl(keyword: string): string {
   return `https://m.1688.com/offer_search/-.html?keywords=${q}`;
 }
 
+/** 알리 안티봇·로그인 점프 페이지 */
+export function is1688LoginWallHtml(html: string): boolean {
+  return /_____tmd_____|login_jump|login\.1688\.com|login\.taobao\.com|punish|deny_pc|安全验证|滑动验证/i.test(
+    html,
+  );
+}
+
 /**
  * 1688 키워드 검색 → SupplyOffer[]
- * 가격이 검색결과에 없으면 offer 상세 페이지를 순차 조회(최대 enrichLimit).
+ * 순서: JSON API → HTML fetch → Playwright(브라우저) → (호출부에서 stub)
  */
 export async function search1688Offers(
   keyword: string,
@@ -133,6 +140,8 @@ export async function search1688Offers(
     limit?: number;
     enrichLimit?: number;
     fetchImpl?: typeof fetch;
+    /** false면 Playwright 생략 */
+    useBrowser?: boolean;
   },
 ): Promise<{
   offers: SupplyOffer[];
@@ -140,6 +149,7 @@ export async function search1688Offers(
   hitCount: number;
   enriched: number;
   fetchError?: string;
+  source?: "api" | "html" | "playwright";
 }> {
   const limit = Math.min(Math.max(options?.limit ?? 3, 1), 10);
   const enrichLimit = Math.min(
@@ -152,69 +162,104 @@ export async function search1688Offers(
     return { offers: [], searchUrl: "", hitCount: 0, enriched: 0 };
   }
 
-  const searchUrls = [
-    build1688SearchUrl(trimmed),
-    build1688MobileSearchUrl(trimmed),
-  ];
+  let hits: Parsed1688SearchHit[] = [];
+  let searchUrl = build1688SearchUrl(trimmed);
+  let lastError = "no_offers_parsed";
+  let source: "api" | "html" | "playwright" | undefined;
 
   try {
-    let html = "";
-    let searchUrl = searchUrls[0]!;
-    let lastError = "no_offers_parsed";
+    // 1) 내부 JSON API
+    const { fetch1688MarketOfferApi } = await import(
+      "@/lib/discover/supply/search-1688-api"
+    );
+    const api = await fetch1688MarketOfferApi(trimmed, {
+      limit: limit * 2,
+      fetchImpl,
+    });
+    if (api.hits.length > 0) {
+      hits = api.hits;
+      searchUrl = api.searchUrl;
+      source = "api";
+    } else {
+      lastError = api.fetchError ?? lastError;
+    }
 
-    for (const url of searchUrls) {
-      searchUrl = url;
-      const res = await fetchImpl(url, {
-        headers: {
-          "User-Agent":
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
-          "Accept-Language": "zh-CN,zh;q=0.9,ko;q=0.8,en;q=0.7",
-          Accept: "text/html,application/xhtml+xml",
-          Referer: "https://www.1688.com/",
-        },
-        signal: AbortSignal.timeout(15000),
-        cache: "no-store",
-        redirect: "follow",
+    // 2) HTML fetch (PC → 모바일)
+    if (hits.length === 0) {
+      const searchUrls = [
+        build1688SearchUrl(trimmed),
+        build1688MobileSearchUrl(trimmed),
+      ];
+      for (const url of searchUrls) {
+        searchUrl = url;
+        const res = await fetchImpl(url, {
+          headers: {
+            "User-Agent":
+              "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+            "Accept-Language": "zh-CN,zh;q=0.9,ko;q=0.8,en;q=0.7",
+            Accept: "text/html,application/xhtml+xml",
+            Referer: "https://www.1688.com/",
+          },
+          signal: AbortSignal.timeout(15000),
+          cache: "no-store",
+          redirect: "follow",
+        });
+
+        if (!res.ok) {
+          lastError = `http_${res.status}`;
+          continue;
+        }
+
+        const html = await res.text();
+        if (is1688LoginWallHtml(html)) {
+          lastError = "needs_login_session";
+          continue;
+        }
+        if (
+          /验证|登录|login|captcha|security/i.test(html) &&
+          html.length < 5000
+        ) {
+          lastError = "blocked_or_login_wall";
+          continue;
+        }
+
+        const previewHits = parse1688SearchHtml(html, limit * 2);
+        if (previewHits.length > 0) {
+          hits = previewHits;
+          source = "html";
+          break;
+        }
+        lastError = "no_offers_parsed";
+      }
+    }
+
+    // 3) Playwright 브라우저
+    const allowBrowser =
+      options?.useBrowser ??
+      (await import("@/lib/discover/supply/search-1688-browser")).shouldUse1688Browser();
+    if (hits.length === 0 && allowBrowser) {
+      const { fetch1688SearchHtmlViaBrowser } = await import(
+        "@/lib/discover/supply/search-1688-browser"
+      );
+      const browser = await fetch1688SearchHtmlViaBrowser(trimmed, {
+        limit: limit * 2,
       });
-
-      if (!res.ok) {
-        lastError = `http_${res.status}`;
-        continue;
+      if (browser.hits.length > 0) {
+        hits = browser.hits;
+        searchUrl = browser.searchUrl;
+        source = "playwright";
+      } else {
+        lastError = browser.fetchError ?? lastError;
       }
-
-      html = await res.text();
-      if (/验证|登录|login|captcha|security/i.test(html) && html.length < 5000) {
-        lastError = "blocked_or_login_wall";
-        html = "";
-        continue;
-      }
-
-      const previewHits = parse1688SearchHtml(html, limit * 2);
-      if (previewHits.length > 0) {
-        break;
-      }
-      lastError = "no_offers_parsed";
-      html = "";
     }
 
-    if (!html) {
-      return {
-        offers: [],
-        searchUrl,
-        hitCount: 0,
-        enriched: 0,
-        fetchError: lastError,
-      };
-    }
-
-    const hits = parse1688SearchHtml(html, limit * 2);
     if (hits.length === 0) {
       return {
         offers: [],
         searchUrl,
         hitCount: 0,
         enriched: 0,
-        fetchError: "no_offers_parsed",
+        fetchError: lastError,
       };
     }
 
@@ -267,6 +312,7 @@ export async function search1688Offers(
         raw: {
           provider: "mall1688-search-live",
           searchUrl,
+          source: source ?? "html",
           enriched: usedDetail,
           fromSearchPrice: hit.costPriceCny,
         },
@@ -278,6 +324,7 @@ export async function search1688Offers(
       searchUrl,
       hitCount: hits.length,
       enriched,
+      source,
       fetchError: offers.length === 0 ? "offers_without_price" : undefined,
     };
   } catch (err) {

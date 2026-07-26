@@ -18,7 +18,7 @@ Amazon US·중국몰 소싱 → 발굴 → 초안 → 채널 등록/동기화 �
 | 네이버 수요 (오픈API 쇼핑 + 검색광고) | **Live** | `NAVER_CLIENT_*`, `NAVER_SEARCHAD_*` |
 | 주간 자동 발굴 (시드 키워드 → 일괄 스캔) | **Live** | `/recommendations` 「이번 주 추천 새로고침」 |
 | 연관 키워드 확장 | **Live(선택)** | 검색광고 연관어, 체크 시 |
-| 1688 공급 자동검색 | **완료(best-effort)** | `DISCOVER_1688_MODE=auto` · 차단 시 stub 폴백 |
+| 1688 공급 자동검색 | **안정화 중** | JSON API → HTML → Playwright · 그래도 실패 시 stub |
 | 1688 실원가 | **반자동** | URL + 수동 CNY (페이지 파싱 자주 실패) |
 | **시장성 판정** (최소가 vs 경쟁×1.15) | **완료** | SELL / 합배송필요 / 비추천 · 발굴 점수 반영 · 카드 UI |
 | **더베이 항공 kg 요금표** | **완료** | 셀러 등급 · 무게→국제배송 (기본 500g) |
@@ -48,11 +48,12 @@ Amazon US·중국몰 소싱 → 발굴 → 초안 → 채널 등록/동기화 �
 12. **상품 실무게 수집** — Amazon Shipping/Item Weight, 1688 净重/毛重 → `estimateIntlShipping`
 13. **1688 키워드 자동검색** — 검색 HTML 파싱 + 상세 보강, 실패 시 stub
 14. **발굴 점수×시장성** — SELL +15 / 합배송 +5 / 비추천 −25·PASS 강등 · 카드에 판매가·경쟁가 강조
+15. **1688 실검색 안정화** — marketOffer API → HTML → Playwright · 선택 storageState 로그인
 
 ### 다음 방향 (우선순위)
 
 1. 채널 API·자동주문 live · SaaS  
-2. 1688 실검색 안정화 (Playwright 등) |
+2. STUB 기본 숨김 / 1688 원가 파싱 성공률 |
 
 ### 목표 스펙 vs 지금 (발굴)
 
@@ -215,7 +216,20 @@ npm run smoke:1688-search -- 无线风扇
 ```
 
 `DISCOVER_1688_MODE`: `auto`(기본, 라이브→stub) / `live` / `stub`.  
-검색·상세가 막히면 stub 오퍼로 폴백하며, 카드에 `liveFallback`이 남을 수 있습니다.
+검색 파이프라인: **JSON API → HTML fetch → Playwright**.  
+
+1688은 비로그인·봇에 **로그인 점프(_____tmd_____)** 를 걸기 때문에, 실검색에는 세션이 필요합니다.
+
+```bash
+npm run playwright:install
+npm run 1688:session          # 브라우저에서 로그인 → secrets/1688-storage.json
+# .env
+# DISCOVER_1688_STORAGE_STATE=./secrets/1688-storage.json
+npm run smoke:1688-search -- 无线风扇
+```
+
+`DISCOVER_1688_BROWSER=off` 이면 Playwright 생략.  
+세션 없거나 만료되면 `needs_login_session` / stub 폴백.
 
 ### API
 

@@ -16,6 +16,7 @@ async function main() {
     JSON.stringify(
       {
         searchUrl: direct.searchUrl,
+        source: direct.source ?? null,
         hitCount: direct.hitCount,
         enriched: direct.enriched,
         fetchError: direct.fetchError ?? null,
@@ -25,6 +26,7 @@ async function main() {
           costPriceCny: o.costPriceCny,
           isStub: o.isStub,
           weightGrams: o.weightGrams ?? null,
+          source: (o.raw as { source?: string } | undefined)?.source ?? null,
         })),
       },
       null,
@@ -59,6 +61,15 @@ async function main() {
 
   if (viaAdapter.length < 1) {
     throw new Error("adapter returned 0 offers (unexpected for auto/stub)");
+  }
+
+  if (
+    direct.fetchError === "needs_login_session" ||
+    direct.fetchError === "login_session_expired"
+  ) {
+    console.warn(
+      "안내: 1688 로그인 세션이 필요합니다 → npm run 1688:session 후 DISCOVER_1688_STORAGE_STATE 설정",
+    );
   }
 
   console.log("smoke:1688-search ok");
