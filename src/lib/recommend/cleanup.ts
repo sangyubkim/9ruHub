@@ -153,7 +153,7 @@ export async function cleanupRecommendations(options: {
 }
 
 /**
- * 추천 1건 하드 삭제.
+ * 추천 1건 하드 삭제 (DRAFT_CREATED 포함).
  * - 연결된 초안/상품은 삭제하지 않음 (관계 SetNull)
  * - 다른 추천이 없는 발굴 후보는 함께 삭제
  */
@@ -173,17 +173,7 @@ export async function deleteRecommendation(
   });
   if (!rec) throw new Error("추천을 찾을 수 없습니다.");
 
-  // 초안이 연결된 활성 추천은 실수 방지 — IGNORED 또는 PENDING만 삭제 허용
-  if (
-    rec.status === RecommendationStatus.DRAFT_CREATED ||
-    rec.status === RecommendationStatus.CONVERTED ||
-    rec.status === RecommendationStatus.ACCEPTED
-  ) {
-    throw new Error(
-      `초안/전환된 추천은 삭제할 수 없습니다 (${rec.status}). 먼저 무시하거나 초안만 관리하세요.`,
-    );
-  }
-
+  // 추천 카드만 제거. 연결된 초안/상품은 삭제하지 않음 (draftId SetNull).
   await prisma.aiRecommendation.delete({ where: { id: rec.id } });
 
   let candidateDeleted = false;

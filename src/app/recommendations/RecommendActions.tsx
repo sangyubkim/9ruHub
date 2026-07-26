@@ -20,7 +20,11 @@ export function RecommendActions({
 
   async function run(action: "accept" | "ignore" | "unignore" | "delete") {
     if (action === "delete") {
-      if (!window.confirm("이 추천을 DB에서 삭제할까요? (되돌릴 수 없음)")) {
+      const msg =
+        status === "DRAFT_CREATED" || status === "CONVERTED"
+          ? "이 추천을 목록에서 삭제할까요?\n(초안은 초안 목록에 그대로 남습니다. 되돌릴 수 없음)"
+          : "이 추천을 DB에서 삭제할까요? (되돌릴 수 없음)";
+      if (!window.confirm(msg)) {
         return;
       }
     }
@@ -98,16 +102,14 @@ export function RecommendActions({
       >
         {busy === "ignore" ? "처리 중…" : "무시"}
       </button>
-      {!locked ? (
-        <button
-          type="button"
-          disabled={busy !== null}
-          onClick={() => run("delete")}
-          className="rounded-full border border-red-200 bg-white px-4 py-1.5 text-sm text-red-700 disabled:opacity-40"
-        >
-          {busy === "delete" ? "삭제 중…" : "삭제"}
-        </button>
-      ) : null}
+      <button
+        type="button"
+        disabled={busy !== null}
+        onClick={() => run("delete")}
+        className="rounded-full border border-red-200 bg-white px-4 py-1.5 text-sm text-red-700 disabled:opacity-40"
+      >
+        {busy === "delete" ? "삭제 중…" : "삭제"}
+      </button>
       {error ? <p className="w-full text-sm text-red-600">{error}</p> : null}
     </div>
   );
