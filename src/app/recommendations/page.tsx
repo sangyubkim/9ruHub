@@ -15,6 +15,7 @@ import { DiscoverKeywordForm } from "@/app/recommendations/DiscoverKeywordForm";
 import { FreshScanBadge } from "@/app/recommendations/FreshScanBadge";
 import { RecommendActions } from "@/app/recommendations/RecommendActions";
 import { RecommendCleanupBar } from "@/app/recommendations/RecommendCleanupBar";
+import { RecommendEconomics } from "@/app/recommendations/RecommendEconomics";
 import { RecommendGenerateForm } from "@/app/recommendations/RecommendGenerateForm";
 import { WeeklyDiscoverForm } from "@/app/recommendations/WeeklyDiscoverForm";
 
@@ -29,6 +30,32 @@ function featureNumber(
   if (!features) return null;
   const value = features[key];
   return typeof value === "number" ? value : null;
+}
+
+function readMarketVerdict(breakdown: unknown) {
+  if (!breakdown || typeof breakdown !== "object") return null;
+  const v = (breakdown as { marketVerdict?: Record<string, unknown> })
+    .marketVerdict;
+  if (!v || typeof v.code !== "string") return null;
+  return {
+    code: v.code,
+    label: typeof v.label === "string" ? v.label : v.code,
+    message: typeof v.message === "string" ? v.message : "",
+    competitorAvgKrw:
+      typeof v.competitorAvgKrw === "number" ? v.competitorAvgKrw : null,
+    marketCeilingKrw:
+      typeof v.marketCeilingKrw === "number" ? v.marketCeilingKrw : null,
+    minViableSaleKrw:
+      typeof v.minViableSaleKrw === "number" ? v.minViableSaleKrw : undefined,
+    consolidatedMinViableKrw:
+      typeof v.consolidatedMinViableKrw === "number"
+        ? v.consolidatedMinViableKrw
+        : null,
+    consolidationUnits:
+      typeof v.consolidationUnits === "number"
+        ? v.consolidationUnits
+        : undefined,
+  };
 }
 
 type PageProps = {
@@ -142,8 +169,25 @@ export default async function RecommendationsPage({ searchParams }: PageProps) {
                 ? Number(item.candidate.costPrice)
                 : featureNumber(item.scoreBreakdown, "costPriceCny");
             const sell =
-              item.candidate?.sellPrice ??
-              featureNumber(item.scoreBreakdown, "sellPriceKrw");
+              featureNumber(item.scoreBreakdown, "sellPriceKrw") ??
+              item.candidate?.sellPrice;
+            const minViable = featureNumber(
+              item.scoreBreakdown,
+              "minViableSaleKrw",
+            );
+            const competitorAvg = featureNumber(
+              item.scoreBreakdown,
+              "competitorAvgKrw",
+            );
+            const sourceCostKrw = featureNumber(
+              item.scoreBreakdown,
+              "sourceCostKrw",
+            );
+            const intlShippingKrw = featureNumber(
+              item.scoreBreakdown,
+              "intlShippingKrw",
+            );
+            const marketVerdict = readMarketVerdict(item.scoreBreakdown);
 
             const candidateUrl =
               item.candidate?.supplyUrl ?? item.sourceUrl ?? null;
@@ -169,36 +213,43 @@ export default async function RecommendationsPage({ searchParams }: PageProps) {
                 className="rounded-2xl border border-zinc-200 bg-white/80 p-5 shadow-sm"
               >
                 <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div>
-                    <p className="text-xs uppercase tracking-wide text-sky-800">
-                      {item.reasonCode ?? "—"} · {Number(item.score).toFixed(1)}점
-                      {item.candidate
-                        ? ` · ${item.candidate.sourceDemandMall}↔${item.candidate.sourceSupplyMall}`
-                        : ""}
-                      {isStubCard ? " · STUB" : ""}
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      {item.candidate ? (
+                        <p className="text-xs text-zinc-500">
+                          {item.candidate.sourceDemandMall}↔
+                          {item.candidate.sourceSupplyMall}
+                        </p>
+                      ) : null}
                       <FreshScanBadge recommendationId={item.id} />
-                    </p>
-                    <h3 className="mt-1 text-lg font-semibold">{item.title}</h3>
+                    </div>
+                    <h3 className="mt-1 text-xl font-semibold tracking-tight">
+                      {item.title}
+                    </h3>
                     {item.candidate?.keyword ? (
                       <p className="mt-1 text-xs text-zinc-500">
                         키워드: {item.candidate.keyword}
                       </p>
                     ) : null}
-                    <p className="mt-2 text-sm text-zinc-600">{item.reasonText}</p>
-                    {(vol != null || margin != null || cost != null) && (
-                      <p className="mt-2 text-xs text-zinc-500">
-                        {vol != null
-                          ? `검색량 ${vol.toLocaleString("ko-KR")}`
-                          : null}
-                        {margin != null
-                          ? ` · 마진 ${(margin * 100).toFixed(1)}%`
-                          : null}
-                        {cost != null ? ` · ¥${cost}` : null}
-                        {sell != null
-                          ? ` → ${sell.toLocaleString("ko-KR")}원`
-                          : null}
+                    <RecommendEconomics
+                      score={Number(item.score)}
+                      reasonCode={item.reasonCode}
+                      isStub={isStubCard}
+                      costCny={cost}
+                      sellKrw={sell}
+                      minViableKrw={minViable}
+                      competitorAvgKrw={competitorAvg}
+                      sourceCostKrw={sourceCostKrw}
+                      intlShippingKrw={intlShippingKrw}
+                      marginRate={margin}
+                      searchVolume={vol}
+                      marketVerdict={marketVerdict}
+                    />
+                    {item.reasonText ? (
+                      <p className="mt-3 text-sm text-zinc-600">
+                        {item.reasonText}
                       </p>
-                    )}
+                    ) : null}
                     {realOfferUrl ? (
                       <a
                         href={realOfferUrl}

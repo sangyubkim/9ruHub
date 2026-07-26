@@ -50,5 +50,42 @@ describe("scoreDiscoverCandidate", () => {
     expect(result.total).toBeGreaterThanOrEqual(55);
     expect(["BUY", "STRONG_BUY"]).toContain(result.label);
   });
+
+  it("boosts score when market verdict is SELL", () => {
+    const base = scoreDiscoverCandidate({
+      searchVolume: 9000,
+      competition: 0.2,
+      marginRate: 0.32,
+      rating: 4.1,
+      reviewCount: 1200,
+      seasonalityScore: 50,
+    });
+    const withSell = scoreDiscoverCandidate({
+      searchVolume: 9000,
+      competition: 0.2,
+      marginRate: 0.32,
+      rating: 4.1,
+      reviewCount: 1200,
+      seasonalityScore: 50,
+      marketVerdictCode: "SELL",
+    });
+    expect(withSell.marketScore).toBe(15);
+    expect(withSell.total).toBe(base.total + 15);
+  });
+
+  it("demotes to PASS when market is NOT_RECOMMENDED", () => {
+    const result = scoreDiscoverCandidate({
+      searchVolume: 28000,
+      competition: 0.22,
+      marginRate: 0.42,
+      rating: 4.7,
+      reviewCount: 8000,
+      seasonalityScore: 75,
+      marketVerdictCode: "NOT_RECOMMENDED",
+    });
+    expect(result.marketScore).toBe(-25);
+    expect(result.label).toBe("PASS");
+    expect(result.reasons.some((r) => r.includes("PASS 강등"))).toBe(true);
+  });
 });
 

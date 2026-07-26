@@ -1,5 +1,7 @@
 import { Prisma } from "@/generated/prisma/client";
 import { getDemandAdapter, getSupplyAdapter } from "@/lib/discover/adapters";
+import { assessDiscoverOfferMarket } from "@/lib/discover/assess-market";
+import { fetchNaverCompetitorPrices } from "@/lib/discover/demand/naver-competitors";
 import { generateDiscoverRecommendCopy } from "@/lib/discover/openai";
 import { joinDemandAndSupply } from "@/lib/discover/pricing";
 import {
@@ -65,10 +67,19 @@ export async function discoverByKeyword(
     };
   }
 
+  // 키워드당 경쟁가 1회 (오퍼마다 반복 호출 방지)
+  const competitorMarket = await fetchNaverCompetitorPrices(trimmed);
+
   const items: DiscoverResultItem[] = [];
 
   for (const offer of offers) {
     const metrics = joinDemandAndSupply(demand, offer);
+    const assessed = await assessDiscoverOfferMarket({
+      keyword: trimmed,
+      costPriceCny: offer.costPriceCny,
+      weightGrams: offer.weightGrams,
+      competitorPrices: competitorMarket.prices,
+    });
     const breakdown = scoreDiscoverCandidate({
       searchVolume: metrics.searchVolume,
       competition: metrics.competition,
@@ -76,6 +87,7 @@ export async function discoverByKeyword(
       rating: metrics.rating,
       reviewCount: metrics.reviewCount,
       seasonalityScore: metrics.seasonalityScore,
+      marketVerdictCode: assessed.marketVerdict.code,
     });
 
     if (breakdown.total < minScore) continue;
@@ -152,6 +164,7 @@ export async function discoverByKeyword(
             score: breakdown.total,
             scoreBreakdown: toJson({
               ...breakdown,
+              marketVerdict: assessed.marketVerdict,
               features: {
                 searchVolume: metrics.searchVolume,
                 competition: metrics.competition,
@@ -160,7 +173,12 @@ export async function discoverByKeyword(
                 reviewCount: metrics.reviewCount,
                 seasonalityScore: metrics.seasonalityScore,
                 costPriceCny: metrics.costPriceCny,
-                sellPriceKrw: metrics.sellPriceKrw,
+                sellPriceKrw: assessed.recommendedSalePriceKrw,
+                discoverEstimateKrw: metrics.sellPriceKrw,
+                minViableSaleKrw: assessed.minViableSaleKrw,
+                competitorAvgKrw: assessed.competitorAvgKrw,
+                intlShippingKrw: assessed.intlShippingKrw,
+                sourceCostKrw: assessed.sourceCostKrw,
               },
             }),
             reasonCode: breakdown.label,
@@ -178,6 +196,7 @@ export async function discoverByKeyword(
             score: breakdown.total,
             scoreBreakdown: toJson({
               ...breakdown,
+              marketVerdict: assessed.marketVerdict,
               features: {
                 searchVolume: metrics.searchVolume,
                 competition: metrics.competition,
@@ -186,7 +205,12 @@ export async function discoverByKeyword(
                 reviewCount: metrics.reviewCount,
                 seasonalityScore: metrics.seasonalityScore,
                 costPriceCny: metrics.costPriceCny,
-                sellPriceKrw: metrics.sellPriceKrw,
+                sellPriceKrw: assessed.recommendedSalePriceKrw,
+                discoverEstimateKrw: metrics.sellPriceKrw,
+                minViableSaleKrw: assessed.minViableSaleKrw,
+                competitorAvgKrw: assessed.competitorAvgKrw,
+                intlShippingKrw: assessed.intlShippingKrw,
+                sourceCostKrw: assessed.sourceCostKrw,
               },
             }),
             status: "PENDING",

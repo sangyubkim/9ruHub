@@ -1,3 +1,5 @@
+import type { MarketVerdictCode } from "@/lib/pricing/viability";
+
 export type DiscoverScoreInput = {
   searchVolume: number;
   competition: number; // 0–1
@@ -5,6 +7,8 @@ export type DiscoverScoreInput = {
   rating: number; // 0–5
   reviewCount: number;
   seasonalityScore: number; // 0–100
+  /** 시장성 판정 — 점수 가감 + NOT_RECOMMENDED 시 PASS 강등 */
+  marketVerdictCode?: MarketVerdictCode | null;
 };
 
 export type DiscoverScoreBreakdown = {
@@ -15,6 +19,9 @@ export type DiscoverScoreBreakdown = {
   ratingScore: number;
   reviewScore: number;
   seasonalityScore: number;
+  /** 시장성 가감 (−25 ~ +15) */
+  marketScore: number;
+  marketVerdictCode: MarketVerdictCode | null;
   reasons: string[];
   label: DiscoverLabel;
 };
@@ -120,6 +127,22 @@ export function scoreDiscoverCandidate(
     reasons.push("시즌성 불리");
   }
 
+  const marketVerdictCode = input.marketVerdictCode ?? null;
+  let marketScore = 0;
+  if (marketVerdictCode === "SELL") {
+    marketScore = 15;
+    reasons.push("시장성 양호(판매 가능)");
+  } else if (marketVerdictCode === "NEED_CONSOLIDATION") {
+    marketScore = 5;
+    reasons.push("합배송 시 시장성");
+  } else if (marketVerdictCode === "NOT_RECOMMENDED") {
+    marketScore = -25;
+    reasons.push("시장성 낮음(경쟁 대비 고가)");
+  } else if (marketVerdictCode === "NO_MARKET_DATA") {
+    marketScore = 0;
+    reasons.push("경쟁가 없어 시장성 미판정");
+  }
+
   const total = Math.max(
     0,
     Math.min(
@@ -129,9 +152,16 @@ export function scoreDiscoverCandidate(
         marginScore +
         ratingScore +
         reviewScore +
-        seasonalityPart,
+        seasonalityPart +
+        marketScore,
     ),
   );
+
+  let label = discoverLabelFromScore(total);
+  if (marketVerdictCode === "NOT_RECOMMENDED" && label !== "PASS") {
+    label = "PASS";
+    reasons.push("시장성으로 PASS 강등");
+  }
 
   return {
     total,
@@ -141,8 +171,10 @@ export function scoreDiscoverCandidate(
     ratingScore,
     reviewScore,
     seasonalityScore: seasonalityPart,
+    marketScore,
+    marketVerdictCode,
     reasons,
-    label: discoverLabelFromScore(total),
+    label,
   };
 }
 

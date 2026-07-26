@@ -1,4 +1,5 @@
 import { Prisma } from "@/generated/prisma/client";
+import { assessDiscoverOfferMarket } from "@/lib/discover/assess-market";
 import { generateDiscoverRecommendCopy } from "@/lib/discover/openai";
 import { joinDemandAndSupply } from "@/lib/discover/pricing";
 import { scoreDiscoverCandidate } from "@/lib/discover/score";
@@ -81,6 +82,12 @@ export async function apply1688SupplyUrlToRecommendation(
     raw: offer.raw,
   });
 
+  const assessed = await assessDiscoverOfferMarket({
+    keyword: candidate.keyword,
+    costPriceCny: offer.costPriceCny,
+    weightGrams: offer.weightGrams,
+  });
+
   const breakdown = scoreDiscoverCandidate({
     searchVolume: metrics.searchVolume,
     competition: metrics.competition,
@@ -88,6 +95,7 @@ export async function apply1688SupplyUrlToRecommendation(
     rating: metrics.rating,
     reviewCount: metrics.reviewCount,
     seasonalityScore: metrics.seasonalityScore,
+    marketVerdictCode: assessed.marketVerdict.code,
   });
 
   const copy = await generateDiscoverRecommendCopy(metrics, breakdown);
@@ -128,6 +136,7 @@ export async function apply1688SupplyUrlToRecommendation(
       score: breakdown.total,
       scoreBreakdown: toJson({
         ...breakdown,
+        marketVerdict: assessed.marketVerdict,
         features: {
           searchVolume: metrics.searchVolume,
           competition: metrics.competition,
@@ -136,7 +145,12 @@ export async function apply1688SupplyUrlToRecommendation(
           reviewCount: metrics.reviewCount,
           seasonalityScore: metrics.seasonalityScore,
           costPriceCny: metrics.costPriceCny,
-          sellPriceKrw: metrics.sellPriceKrw,
+          sellPriceKrw: assessed.recommendedSalePriceKrw,
+          discoverEstimateKrw: metrics.sellPriceKrw,
+          minViableSaleKrw: assessed.minViableSaleKrw,
+          competitorAvgKrw: assessed.competitorAvgKrw,
+          intlShippingKrw: assessed.intlShippingKrw,
+          sourceCostKrw: assessed.sourceCostKrw,
         },
       }),
       reasonCode: breakdown.label,
@@ -150,6 +164,7 @@ export async function apply1688SupplyUrlToRecommendation(
     candidate: updatedCandidate,
     metrics,
     breakdown,
+    marketVerdict: assessed.marketVerdict,
     offer: {
       supplyUrl: offer.supplyUrl,
       costPriceCny: offer.costPriceCny,
