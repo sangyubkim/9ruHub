@@ -29,6 +29,7 @@
     "ai:import-gemini": "tsx scripts/import-gemini-from-9rutrip.ts",
     "smoke:gemini": "tsx scripts/smoke-gemini.ts",
     "smoke:discover": "tsx scripts/smoke-discover.ts",
+    "smoke:1688-search": "tsx scripts/smoke-1688-search.ts",
     "report:morning": "tsx scripts/smoke-morning-report.ts",
     "discover:keyword": "tsx scripts/discover-keyword.ts",
     "discover:weekly": "tsx scripts/discover-weekly.ts",

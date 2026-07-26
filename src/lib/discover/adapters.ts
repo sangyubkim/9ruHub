@@ -5,7 +5,7 @@ import {
 } from "@/lib/discover/demand/naver-live";
 import { NaverDemandStubAdapter } from "@/lib/discover/demand/naver-stub";
 import { AliExpressSupplyStubAdapter } from "@/lib/discover/supply/aliexpress-stub";
-import { Mall1688SupplyStubAdapter } from "@/lib/discover/supply/mall1688-stub";
+import { create1688SupplyAdapter } from "@/lib/discover/supply/mall1688-live";
 import { TaobaoSupplyStubAdapter } from "@/lib/discover/supply/taobao-stub";
 import type { DemandMallAdapter, SupplyMallAdapter } from "@/lib/discover/types";
 
@@ -22,7 +22,7 @@ export function getDemandAdapter(): DemandMallAdapter {
   return new NaverDemandStubAdapter();
 }
 
-/** MVP 기본: 1688 공급가 */
+/** MVP 기본: 1688 공급가 (DISCOVER_1688_MODE=auto|live|stub) */
 export function getSupplyAdapter(): SupplyMallAdapter {
   const mode = (process.env.DISCOVER_SUPPLY_ADAPTER ?? "1688").toLowerCase();
   if (mode === "aliexpress" || mode === "ali") {
@@ -33,5 +33,5 @@ export function getSupplyAdapter(): SupplyMallAdapter {
     console.warn("Taobao supply is extension stub only");
     return new TaobaoSupplyStubAdapter();
   }
-  return new Mall1688SupplyStubAdapter();
+  return create1688SupplyAdapter();
 }
