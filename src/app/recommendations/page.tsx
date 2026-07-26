@@ -8,6 +8,7 @@ import {
 } from "@/lib/discover/supply/parse-1688-url";
 import {
   activeRecommendationWhere,
+  amazonFacingRecommendationWhere,
   ignoredRecommendationWhere,
 } from "@/lib/recommend/filters";
 import { getDefaultTenantId } from "@/lib/tenant";
@@ -70,15 +71,29 @@ export default async function RecommendationsPage({ searchParams }: PageProps) {
   const chinaUi = show1688Ui();
 
   const tenantId = await getDefaultTenantId();
+  const listWhere = chinaUi
+    ? showIgnored
+      ? ignoredRecommendationWhere(tenantId)
+      : activeRecommendationWhere(tenantId)
+    : amazonFacingRecommendationWhere(tenantId, showIgnored);
+  const ignoredCountWhere = chinaUi
+    ? ignoredRecommendationWhere(tenantId)
+    : amazonFacingRecommendationWhere(tenantId, true);
+
   const [items, ignoredCount] = await Promise.all([
     prisma.aiRecommendation.findMany({
-      where: showIgnored
-        ? ignoredRecommendationWhere(tenantId)
-        : activeRecommendationWhere(tenantId),
+      where: listWhere,
       orderBy: [{ score: "desc" }, { createdAt: "desc" }],
       include: {
         draft: { select: { id: true, status: true } },
-        product: { select: { id: true, salePriceKrw: true, sourcePrice: true } },
+        product: {
+          select: {
+            id: true,
+            salePriceKrw: true,
+            sourcePrice: true,
+            costKrw: true,
+          },
+        },
         candidate: {
           select: {
             id: true,
@@ -100,7 +115,7 @@ export default async function RecommendationsPage({ searchParams }: PageProps) {
       take: 100,
     }),
     prisma.aiRecommendation.count({
-      where: ignoredRecommendationWhere(tenantId),
+      where: ignoredCountWhere,
     }),
   ]);
 
@@ -183,9 +198,15 @@ export default async function RecommendationsPage({ searchParams }: PageProps) {
               item.candidate?.costPrice != null
                 ? Number(item.candidate.costPrice)
                 : featureNumber(item.scoreBreakdown, "costPriceCny");
+            const costUsd =
+              featureNumber(item.scoreBreakdown, "sourcePriceUsd") ??
+              (item.product?.sourcePrice != null
+                ? Number(item.product.sourcePrice)
+                : null);
             const sell =
               featureNumber(item.scoreBreakdown, "sellPriceKrw") ??
-              item.candidate?.sellPrice;
+              item.candidate?.sellPrice ??
+              item.product?.salePriceKrw;
             const minViable = featureNumber(
               item.scoreBreakdown,
               "minViableSaleKrw",
@@ -194,10 +215,9 @@ export default async function RecommendationsPage({ searchParams }: PageProps) {
               item.scoreBreakdown,
               "competitorAvgKrw",
             );
-            const sourceCostKrw = featureNumber(
-              item.scoreBreakdown,
-              "sourceCostKrw",
-            );
+            const sourceCostKrw =
+              featureNumber(item.scoreBreakdown, "sourceCostKrw") ??
+              item.product?.costKrw;
             const intlShippingKrw = featureNumber(
               item.scoreBreakdown,
               "intlShippingKrw",
@@ -262,6 +282,7 @@ export default async function RecommendationsPage({ searchParams }: PageProps) {
                       reasonCode={item.reasonCode}
                       isStub={isStubCard}
                       costCny={cost}
+                      costUsd={costUsd}
                       sellKrw={sell}
                       minViableKrw={minViable}
                       competitorAvgKrw={competitorAvg}

@@ -30,6 +30,7 @@ export function RecommendEconomics({
   reasonCode,
   isStub,
   costCny,
+  costUsd,
   sellKrw,
   minViableKrw,
   competitorAvgKrw,
@@ -43,6 +44,8 @@ export function RecommendEconomics({
   reasonCode?: string | null;
   isStub?: boolean;
   costCny?: number | null;
+  /** Amazon 경로 원가(USD). CNY가 없을 때 원가 칸에 표시 */
+  costUsd?: number | null;
   sellKrw?: number | null;
   minViableKrw?: number | null;
   competitorAvgKrw?: number | null;
@@ -98,9 +101,21 @@ export function RecommendEconomics({
         </div>
         <dl className="grid grid-cols-2 gap-x-3 gap-y-2 text-sm">
           <div>
-            <dt className="text-xs text-zinc-500">원가(CNY)</dt>
+            <dt className="text-xs text-zinc-500">
+              {costCny != null
+                ? "원가(CNY)"
+                : costUsd != null
+                  ? "원가(USD)"
+                  : "원가"}
+            </dt>
             <dd className="font-semibold text-zinc-900">
-              {costCny != null ? `¥${costCny}` : "—"}
+              {costCny != null
+                ? `¥${costCny}`
+                : costUsd != null
+                  ? `$${costUsd.toLocaleString("en-US", {
+                      maximumFractionDigits: 2,
+                    })}`
+                  : "—"}
             </dd>
           </div>
           <div>

@@ -1,7 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { RecommendationStatus } from "@/generated/prisma/client";
+import {
+  RecommendationStatus,
+  SourceMall,
+  SupplyMall,
+} from "@/generated/prisma/client";
 import {
   activeRecommendationWhere,
+  amazonFacingRecommendationWhere,
   ignoredRecommendationWhere,
 } from "@/lib/recommend/filters";
 
@@ -17,6 +22,35 @@ describe("recommendation filters", () => {
     expect(ignoredRecommendationWhere("tenant-1")).toEqual({
       tenantId: "tenant-1",
       status: RecommendationStatus.IGNORED,
+    });
+  });
+
+  it("Amazon-facing where는 1688 stub·도매 오퍼를 제외한다", () => {
+    const where = amazonFacingRecommendationWhere("tenant-1", false);
+    expect(where).toMatchObject({
+      AND: [
+        {
+          tenantId: "tenant-1",
+          status: { not: RecommendationStatus.IGNORED },
+        },
+        {
+          NOT: {
+            OR: expect.arrayContaining([
+              {
+                candidate: {
+                  is: { sourceSupplyMall: SupplyMall.MALL_1688 },
+                },
+              },
+              { title: { contains: "도매 오퍼" } },
+              {
+                product: {
+                  is: { sourceMall: { not: SourceMall.AMAZON_US } },
+                },
+              },
+            ]),
+          },
+        },
+      ],
     });
   });
 });

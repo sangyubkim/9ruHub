@@ -1,6 +1,11 @@
-import { Prisma, ProductStatus } from "@/generated/prisma/client";
+import {
+  Prisma,
+  ProductStatus,
+  SourceMall,
+} from "@/generated/prisma/client";
 import { prisma } from "@/lib/db";
 import { calculateSalePrice, defaultPriceRuleFromEnv } from "@/lib/price-engine";
+import { withAmazonScoreFeatures } from "@/lib/recommend/amazon-features";
 import { generateRecommendCopy } from "@/lib/recommend/openai";
 import {
   reasonCodeFromScore,
@@ -59,10 +64,25 @@ export async function generateRecommendationsForTenant(options?: {
   const limit = options?.limit ?? 20;
   const minScore = options?.minScore ?? 40;
 
+  // Amazon-first: 1688/시드 도매 오퍼 Product는 스캔하지 않음
   const products = await prisma.product.findMany({
     where: {
       tenantId,
-      status: { in: [ProductStatus.SOURCING, ProductStatus.DRAFTING, ProductStatus.LISTED] },
+      sourceMall: SourceMall.AMAZON_US,
+      status: {
+        in: [
+          ProductStatus.SOURCING,
+          ProductStatus.DRAFTING,
+          ProductStatus.LISTED,
+        ],
+      },
+      NOT: {
+        OR: [
+          { title: { contains: "도매 오퍼" } },
+          { titleKo: { contains: "도매 오퍼" } },
+          { sourceUrl: { contains: "1688.com" } },
+        ],
+      },
     },
     orderBy: { updatedAt: "desc" },
     take: 100,
@@ -82,9 +102,10 @@ export async function generateRecommendationsForTenant(options?: {
     });
     if (existing) continue;
 
+    const sourcePriceUsd = Number(product.sourcePrice);
     const priced = await resolveCostAndSale(
       tenantId,
-      Number(product.sourcePrice),
+      sourcePriceUsd,
       product.salePriceKrw,
       product.costKrw,
     );
@@ -92,7 +113,7 @@ export async function generateRecommendationsForTenant(options?: {
     const breakdown = scoreCandidate({
       title: product.title,
       brand: product.brand,
-      sourcePriceUsd: Number(product.sourcePrice),
+      sourcePriceUsd,
       salePriceKrw: priced.salePriceKrw,
       costKrw: priced.costKrw,
       inStock: product.inStock,
@@ -103,11 +124,17 @@ export async function generateRecommendationsForTenant(options?: {
 
     if (breakdown.total < minScore) continue;
 
+    const scorePayload = withAmazonScoreFeatures(
+      breakdown,
+      priced,
+      sourcePriceUsd,
+    );
+
     const copy = await generateRecommendCopy({
       title: product.titleKo ?? product.title,
       brand: product.brand,
       sourceUrl: product.sourceUrl,
-      sourcePriceUsd: Number(product.sourcePrice),
+      sourcePriceUsd,
       salePriceKrw: priced.salePriceKrw,
       costKrw: priced.costKrw,
       inStock: product.inStock,
@@ -124,7 +151,7 @@ export async function generateRecommendationsForTenant(options?: {
         externalId: product.externalId,
         title: product.titleKo ?? product.title,
         score: breakdown.total,
-        scoreBreakdown: toJson(breakdown),
+        scoreBreakdown: toJson(scorePayload),
         status: "PENDING",
         reasonCode: reasonCodeFromScore(breakdown.total),
         reasonText: copy.reasonText,
@@ -230,10 +257,11 @@ export async function createRecommendationFromUrl(
     },
   });
 
+  const sourcePriceUsd = Number(product.sourcePrice);
   const breakdown: ScoreBreakdown = scoreCandidate({
     title: product.title,
     brand: product.brand,
-    sourcePriceUsd: Number(product.sourcePrice),
+    sourcePriceUsd,
     salePriceKrw: priced.salePriceKrw,
     costKrw: priced.costKrw,
     inStock: product.inStock,
@@ -242,11 +270,17 @@ export async function createRecommendationFromUrl(
     recentSales: product.totalSold,
   });
 
+  const scorePayload = withAmazonScoreFeatures(
+    breakdown,
+    priced,
+    sourcePriceUsd,
+  );
+
   const copy = await generateRecommendCopy({
     title: product.titleKo ?? product.title,
     brand: product.brand,
     sourceUrl: product.sourceUrl,
-    sourcePriceUsd: Number(product.sourcePrice),
+    sourcePriceUsd,
     salePriceKrw: priced.salePriceKrw,
     costKrw: priced.costKrw,
     inStock: product.inStock,
@@ -262,7 +296,7 @@ export async function createRecommendationFromUrl(
       externalId: product.externalId,
       title: product.titleKo ?? product.title,
       score: breakdown.total,
-      scoreBreakdown: toJson(breakdown),
+      scoreBreakdown: toJson(scorePayload),
       status: "PENDING",
       reasonCode: reasonCodeFromScore(breakdown.total),
       reasonText: copy.reasonText,
