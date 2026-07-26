@@ -43,6 +43,8 @@ export type CompetitorSampleView = {
   link: string;
   priceKrw: number;
   mallName: string;
+  matchKind?: "same_likely" | "similar";
+  matchLabel?: string;
 };
 
 export function RecommendEconomics({
@@ -250,33 +252,47 @@ export function RecommendEconomics({
 
       {competitorSamples && competitorSamples.length > 0 ? (
         <div className="rounded-xl border border-zinc-200 bg-white/80 px-3 py-2.5 text-xs text-zinc-600">
-          <p className="font-semibold text-zinc-800">경쟁 샘플 (유사 키워드)</p>
+          <p className="font-semibold text-zinc-800">경쟁 샘플</p>
           <p className="mt-0.5 text-zinc-500">
-            동일 제품이 아니라 네이버 쇼핑 검색 결과입니다
-            {naverKeyword ? (
-              <>
-                {" "}
-                · 검색어 «{naverKeyword}»
-              </>
-            ) : null}
+            네이버 쇼핑 검색 결과 ·{" "}
+            <span className="text-emerald-700">동일 추정</span>=모델·브랜드
+            토큰 일치 · <span className="text-amber-700">유사</span>=같은
+            키워드대 대체재
+            {naverKeyword ? <> · 검색어 «{naverKeyword}»</> : null}
           </p>
           <ul className="mt-2 space-y-1.5">
-            {competitorSamples.map((c) => (
-              <li key={c.link} className="flex flex-wrap items-baseline gap-x-2">
-                <a
-                  href={c.link}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="font-medium text-sky-800 underline underline-offset-2"
+            {competitorSamples.map((c) => {
+              const same = c.matchKind === "same_likely";
+              const label = c.matchLabel ?? (same ? "동일 추정" : "유사");
+              return (
+                <li
+                  key={c.link}
+                  className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5"
                 >
-                  {c.title.length > 48 ? `${c.title.slice(0, 48)}…` : c.title}
-                </a>
-                <span className="text-zinc-800">
-                  {c.priceKrw.toLocaleString("ko-KR")}원
-                </span>
-                <span className="text-zinc-400">{c.mallName}</span>
-              </li>
-            ))}
+                  <span
+                    className={`rounded px-1.5 py-0.5 text-[10px] font-semibold ${
+                      same
+                        ? "bg-emerald-100 text-emerald-800"
+                        : "bg-amber-100 text-amber-900"
+                    }`}
+                  >
+                    {label}
+                  </span>
+                  <a
+                    href={c.link}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="font-medium text-sky-800 underline underline-offset-2"
+                  >
+                    {c.title.length > 48 ? `${c.title.slice(0, 48)}…` : c.title}
+                  </a>
+                  <span className="text-zinc-800">
+                    {c.priceKrw.toLocaleString("ko-KR")}원
+                  </span>
+                  <span className="text-zinc-400">{c.mallName}</span>
+                </li>
+              );
+            })}
           </ul>
         </div>
       ) : null}

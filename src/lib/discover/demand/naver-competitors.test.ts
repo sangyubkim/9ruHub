@@ -43,5 +43,24 @@ describe("samplesFromNaverShopItems", () => {
     expect(out.samples).toHaveLength(2);
     expect(out.samples[0]?.title).toBe("Soundcore P40i");
     expect(out.samples[0]?.link).toContain("naver.com");
+    expect(out.samples[0]?.matchLabel).toBe("유사");
+  });
+
+  it("labels same model when source title provided", () => {
+    const out = samplesFromNaverShopItems(
+      [
+        item({
+          title: "사운드코어 P40i 이어폰",
+          link: "https://search.shopping.naver.com/a",
+          lprice: "70000",
+        }),
+      ],
+      {
+        sourceTitle: "Soundcore P40i by Anker",
+        sourceBrand: "Anker",
+      },
+    );
+    expect(out.samples[0]?.matchKind).toBe("same_likely");
+    expect(out.samples[0]?.matchLabel).toBe("동일 추정");
   });
 });

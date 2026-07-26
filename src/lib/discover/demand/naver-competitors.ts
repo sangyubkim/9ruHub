@@ -1,4 +1,8 @@
 import {
+  classifyCompetitorMatch,
+  type CompetitorMatchKind,
+} from "@/lib/discover/demand/competitor-match";
+import {
   fetchNaverShopSearch,
   hasNaverOpenApiCredentials,
   type NaverShopItem,
@@ -9,6 +13,9 @@ export type CompetitorSample = {
   link: string;
   priceKrw: number;
   mallName: string;
+  /** same_likely = 모델·브랜드 토큰 겹침 추정 (ASIN 확정 아님) */
+  matchKind: CompetitorMatchKind;
+  matchLabel: string;
 };
 
 function stripHtml(text: string): string {
@@ -17,7 +24,12 @@ function stripHtml(text: string): string {
 
 export function samplesFromNaverShopItems(
   items: NaverShopItem[],
-  options?: { maxPrices?: number; maxSamples?: number },
+  options?: {
+    maxPrices?: number;
+    maxSamples?: number;
+    sourceTitle?: string;
+    sourceBrand?: string | null;
+  },
 ): {
   prices: number[];
   avg: number | null;
@@ -25,6 +37,7 @@ export function samplesFromNaverShopItems(
 } {
   const maxPrices = options?.maxPrices ?? 20;
   const maxSamples = options?.maxSamples ?? 5;
+  const sourceTitle = options?.sourceTitle?.trim() ?? "";
 
   const priced = items
     .map((item) => {
@@ -33,11 +46,21 @@ export function samplesFromNaverShopItems(
         return null;
       }
       if (!item.link?.startsWith("http")) return null;
+      const title = stripHtml(item.title) || "네이버 상품";
+      const match = sourceTitle
+        ? classifyCompetitorMatch({
+            sourceTitle,
+            sourceBrand: options?.sourceBrand,
+            competitorTitle: title,
+          })
+        : { kind: "similar" as const, label: "유사" };
       return {
-        title: stripHtml(item.title) || "네이버 상품",
+        title,
         link: item.link,
         priceKrw,
         mallName: item.mallName?.trim() || "쇼핑몰",
+        matchKind: match.kind,
+        matchLabel: match.label,
       } satisfies CompetitorSample;
     })
     .filter((x): x is CompetitorSample => x != null)
@@ -62,7 +85,13 @@ export function samplesFromNaverShopItems(
  */
 export async function fetchNaverCompetitorPrices(
   keyword: string,
-  options?: { display?: number; maxPrices?: number; maxSamples?: number },
+  options?: {
+    display?: number;
+    maxPrices?: number;
+    maxSamples?: number;
+    sourceTitle?: string;
+    sourceBrand?: string | null;
+  },
 ): Promise<{
   prices: number[];
   avg: number | null;
@@ -89,6 +118,13 @@ export async function fetchNaverCompetitorPrices(
     const parsed = samplesFromNaverShopItems(shop.items, {
       maxPrices: options?.maxPrices,
       maxSamples: options?.maxSamples,
+      sourceTitle: options?.sourceTitle,
+      sourceBrand: options?.sourceBrand,
+    });
+    // 동일 추정을 앞에 두어 확인하기 쉽게
+    parsed.samples.sort((a, b) => {
+      if (a.matchKind === b.matchKind) return a.priceKrw - b.priceKrw;
+      return a.matchKind === "same_likely" ? -1 : 1;
     });
     return {
       ...parsed,

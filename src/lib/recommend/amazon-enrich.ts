@@ -140,7 +140,10 @@ export async function enrichAmazonMarket(
   let competitorSamples: CompetitorSample[] = [];
 
   if (keyword) {
-    const market = await fetchNaverCompetitorPrices(keyword);
+    const market = await fetchNaverCompetitorPrices(keyword, {
+      sourceTitle: product.title,
+      sourceBrand: product.brand,
+    });
     competitorAvgKrw = market.avg;
     competitorCount = market.prices.length;
     competitorSamples = market.samples;

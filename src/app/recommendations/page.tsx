@@ -107,11 +107,22 @@ function readCompetitorSamples(breakdown: unknown) {
       ) {
         return null;
       }
+      const matchKind =
+        o.matchKind === "same_likely" || o.matchKind === "similar"
+          ? o.matchKind
+          : "similar";
       return {
         title: o.title,
         link: o.link,
         priceKrw: o.priceKrw,
         mallName: typeof o.mallName === "string" ? o.mallName : "",
+        matchKind,
+        matchLabel:
+          typeof o.matchLabel === "string"
+            ? o.matchLabel
+            : matchKind === "same_likely"
+              ? "동일 추정"
+              : "유사",
       };
     })
     .filter((x): x is NonNullable<typeof x> => x != null);
