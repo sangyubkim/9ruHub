@@ -91,6 +91,39 @@ function readShipping(breakdown: unknown) {
   };
 }
 
+function readCompetitorSamples(breakdown: unknown) {
+  if (!breakdown || typeof breakdown !== "object") return [];
+  const features = (breakdown as { features?: Record<string, unknown> }).features;
+  const raw = features?.competitorSamples;
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map((item) => {
+      if (!item || typeof item !== "object") return null;
+      const o = item as Record<string, unknown>;
+      if (
+        typeof o.title !== "string" ||
+        typeof o.link !== "string" ||
+        typeof o.priceKrw !== "number"
+      ) {
+        return null;
+      }
+      return {
+        title: o.title,
+        link: o.link,
+        priceKrw: o.priceKrw,
+        mallName: typeof o.mallName === "string" ? o.mallName : "",
+      };
+    })
+    .filter((x): x is NonNullable<typeof x> => x != null);
+}
+
+function featureString(breakdown: unknown, key: string): string | null {
+  if (!breakdown || typeof breakdown !== "object") return null;
+  const features = (breakdown as { features?: Record<string, unknown> }).features;
+  const v = features?.[key];
+  return typeof v === "string" && v.trim() ? v : null;
+}
+
 type PageProps = {
   searchParams?: Promise<{ ignored?: string }>;
 };
@@ -262,6 +295,13 @@ export default async function RecommendationsPage({ searchParams }: PageProps) {
             const shipping = isFallbackCard
               ? null
               : readShipping(item.scoreBreakdown);
+            const competitorSamples = isFallbackCard
+              ? []
+              : readCompetitorSamples(item.scoreBreakdown);
+            const naverKeyword = featureString(
+              item.scoreBreakdown,
+              "naverKeyword",
+            );
 
             const candidateUrl =
               item.candidate?.supplyUrl ?? item.sourceUrl ?? null;
@@ -326,6 +366,8 @@ export default async function RecommendationsPage({ searchParams }: PageProps) {
                       sellKrw={isFallbackCard ? null : sell}
                       minViableKrw={isFallbackCard ? null : minViable}
                       competitorAvgKrw={competitorAvg}
+                      competitorSamples={competitorSamples}
+                      naverKeyword={naverKeyword}
                       sourceCostKrw={isFallbackCard ? null : sourceCostKrw}
                       intlShippingKrw={
                         isFallbackCard ? null : intlShippingKrw

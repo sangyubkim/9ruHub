@@ -1,5 +1,8 @@
 import type { FetchedProduct } from "@/lib/amazon/fetch-product";
-import { fetchNaverCompetitorPrices } from "@/lib/discover/demand/naver-competitors";
+import {
+  fetchNaverCompetitorPrices,
+  type CompetitorSample,
+} from "@/lib/discover/demand/naver-competitors";
 import {
   estimateIntlShipping,
   type IntlShippingQuote,
@@ -56,6 +59,7 @@ export type AmazonMarketEnrichment = {
   keyword: string;
   competitorAvgKrw: number | null;
   competitorCount: number;
+  competitorSamples: CompetitorSample[];
   marketVerdict: ReturnType<typeof evaluateMarketViability>;
 };
 
@@ -133,11 +137,13 @@ export async function enrichAmazonMarket(
 
   let competitorAvgKrw: number | null = null;
   let competitorCount = 0;
+  let competitorSamples: CompetitorSample[] = [];
 
   if (keyword) {
     const market = await fetchNaverCompetitorPrices(keyword);
     competitorAvgKrw = market.avg;
     competitorCount = market.prices.length;
+    competitorSamples = market.samples;
   }
 
   const marketVerdict = evaluateMarketViability({
@@ -150,6 +156,7 @@ export async function enrichAmazonMarket(
     keyword,
     competitorAvgKrw,
     competitorCount,
+    competitorSamples,
     marketVerdict,
   };
 }

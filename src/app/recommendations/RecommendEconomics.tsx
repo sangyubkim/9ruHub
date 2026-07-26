@@ -38,6 +38,13 @@ export type ShippingQuoteView = {
   weightSource: "amazon_parse" | "default" | string;
 };
 
+export type CompetitorSampleView = {
+  title: string;
+  link: string;
+  priceKrw: number;
+  mallName: string;
+};
+
 export function RecommendEconomics({
   score,
   reasonCode,
@@ -48,6 +55,8 @@ export function RecommendEconomics({
   sellKrw,
   minViableKrw,
   competitorAvgKrw,
+  competitorSamples,
+  naverKeyword,
   sourceCostKrw,
   intlShippingKrw,
   marginRate,
@@ -67,6 +76,8 @@ export function RecommendEconomics({
   sellKrw?: number | null;
   minViableKrw?: number | null;
   competitorAvgKrw?: number | null;
+  competitorSamples?: CompetitorSampleView[] | null;
+  naverKeyword?: string | null;
   sourceCostKrw?: number | null;
   intlShippingKrw?: number | null;
   /** 실마진 (판매가−원가)/판매가 */
@@ -234,6 +245,39 @@ export function RecommendEconomics({
           {shipping.note ? (
             <p className="mt-0.5 text-zinc-500">{shipping.note}</p>
           ) : null}
+        </div>
+      ) : null}
+
+      {competitorSamples && competitorSamples.length > 0 ? (
+        <div className="rounded-xl border border-zinc-200 bg-white/80 px-3 py-2.5 text-xs text-zinc-600">
+          <p className="font-semibold text-zinc-800">경쟁 샘플 (유사 키워드)</p>
+          <p className="mt-0.5 text-zinc-500">
+            동일 제품이 아니라 네이버 쇼핑 검색 결과입니다
+            {naverKeyword ? (
+              <>
+                {" "}
+                · 검색어 «{naverKeyword}»
+              </>
+            ) : null}
+          </p>
+          <ul className="mt-2 space-y-1.5">
+            {competitorSamples.map((c) => (
+              <li key={c.link} className="flex flex-wrap items-baseline gap-x-2">
+                <a
+                  href={c.link}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="font-medium text-sky-800 underline underline-offset-2"
+                >
+                  {c.title.length > 48 ? `${c.title.slice(0, 48)}…` : c.title}
+                </a>
+                <span className="text-zinc-800">
+                  {c.priceKrw.toLocaleString("ko-KR")}원
+                </span>
+                <span className="text-zinc-400">{c.mallName}</span>
+              </li>
+            ))}
+          </ul>
         </div>
       ) : null}
 

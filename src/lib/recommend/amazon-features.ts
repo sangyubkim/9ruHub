@@ -1,3 +1,4 @@
+import type { CompetitorSample } from "@/lib/discover/demand/naver-competitors";
 import type { MarketVerdict } from "@/lib/pricing/viability";
 import type { ShippingDetail } from "@/lib/recommend/amazon-enrich";
 import type { ScoreBreakdown } from "@/lib/recommend/score";
@@ -5,6 +6,7 @@ import type { ScoreBreakdown } from "@/lib/recommend/score";
 export type AmazonScoreFeatureExtras = {
   intlShippingKrw?: number | null;
   competitorAvgKrw?: number | null;
+  competitorSamples?: CompetitorSample[] | null;
   minViableSaleKrw?: number | null;
   marketVerdict?: MarketVerdict | null;
   isFallback?: boolean;
@@ -34,6 +36,7 @@ export function withAmazonScoreFeatures(
       targetMarginRate: extras?.targetMarginRate ?? null,
       intlShippingKrw: extras?.intlShippingKrw ?? null,
       competitorAvgKrw: extras?.competitorAvgKrw ?? null,
+      competitorSamples: extras?.competitorSamples ?? [],
       minViableSaleKrw: extras?.minViableSaleKrw ?? null,
       isFallback: Boolean(extras?.isFallback),
       naverKeyword: extras?.naverKeyword ?? null,

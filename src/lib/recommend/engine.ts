@@ -113,6 +113,7 @@ export async function generateRecommendationsForTenant(options?: {
       {
         intlShippingKrw: priced.intlShippingKrw,
         competitorAvgKrw: market.competitorAvgKrw,
+        competitorSamples: market.competitorSamples,
         minViableSaleKrw: priced.minViableSaleKrw,
         marketVerdict: market.marketVerdict,
         isFallback: false,
@@ -271,6 +272,7 @@ export async function createRecommendationFromUrl(
     {
       intlShippingKrw: priced.intlShippingKrw,
       competitorAvgKrw: market.competitorAvgKrw,
+      competitorSamples: market.competitorSamples,
       minViableSaleKrw: priced.minViableSaleKrw,
       marketVerdict: market.marketVerdict,
       isFallback: fetched.isFallback,
