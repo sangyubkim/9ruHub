@@ -72,7 +72,20 @@ export async function createDraftFromUrl(
   const resolvedTenantId = tenantId ?? (await getDefaultTenantId());
   const product = await fetchAmazonUsProduct(url);
   const rule = await getPriceRule(resolvedTenantId);
-  const breakdown = calculateSalePrice(product.sourcePrice, rule);
+  const { estimateIntlShipping } = await import(
+    "@/lib/forwarder/shipping-estimate"
+  );
+  const shippingQuote = estimateIntlShipping({ region: "US" });
+  const ruleWithMalltail = {
+    ...rule,
+    chinaShippingFeeKrw: rule.chinaShippingFeeKrw ?? 0,
+    intlShippingFeeKrw: shippingQuote.feeKrw,
+    shippingFeeKrw: shippingQuote.feeKrw,
+  };
+  const breakdown = {
+    ...calculateSalePrice(product.sourcePrice, ruleWithMalltail),
+    shippingQuote,
+  };
 
   let titleKo = localizeTitle(product.title, product.brand);
   let detailHtml = renderDetailHtml(product, breakdown, DEFAULT_NOTICE);

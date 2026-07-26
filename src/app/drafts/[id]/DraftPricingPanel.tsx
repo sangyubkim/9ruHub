@@ -25,6 +25,7 @@ export function DraftPricingPanel({
 }) {
   const router = useRouter();
   const [competitors, setCompetitors] = useState("");
+  const [weightGrams, setWeightGrams] = useState("500");
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [preview, setPreview] = useState<{
@@ -89,25 +90,22 @@ export function DraftPricingPanel({
     setMessage(null);
     try {
       const china = num(breakdown.chinaShippingKrw) ?? 0;
-      const intl =
-        num(breakdown.intlShippingKrw) ?? num(breakdown.shippingFeeKrw) ?? 15000;
       const cost =
         num(breakdown.sourceCostKrw) ??
         num(breakdown.sourcePriceKrw) ??
         sourcePrice;
+      const weight = Number(weightGrams);
 
       const res = await fetch("/api/pricing/recommend", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           cost,
-          currency:
-            num(breakdown.sourceCostKrw) != null ||
-            num(breakdown.sourcePriceKrw) != null
-              ? "KRW"
-              : currency || "KRW",
+          currency: currency || "CNY",
           chinaShipping: china,
-          intlShipping: intl,
+          // 국제배송은 무게 요금표로 재산출 (고정 1.5만 미사용)
+          weightGrams: Number.isFinite(weight) && weight > 0 ? weight : 500,
+          region: (currency || "").toUpperCase() === "USD" ? "US" : "CN",
           dutyRate:
             typeof breakdown.dutyRate === "number"
               ? breakdown.dutyRate
@@ -169,6 +167,18 @@ export function DraftPricingPanel({
       ) : null}
 
       <label className="mt-4 block text-sm">
+        <span className="mb-1 block text-zinc-600">
+          무게(g) — 더베이 항공 요금표
+        </span>
+        <input
+          type="number"
+          className="w-full rounded-xl border border-zinc-300 px-3 py-2"
+          value={weightGrams}
+          onChange={(e) => setWeightGrams(e.target.value)}
+        />
+      </label>
+
+      <label className="mt-3 block text-sm">
         <span className="mb-1 block text-zinc-600">
           경쟁상품 가격 (선택, 쉼표 구분)
         </span>

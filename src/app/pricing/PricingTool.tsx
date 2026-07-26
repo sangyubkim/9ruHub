@@ -29,6 +29,16 @@ type RecommendResult = {
     consolidatedMinViableKrw?: number | null;
     consolidationUnits?: number;
   };
+  shippingQuote?: {
+    feeKrw?: number;
+    billableKg?: number;
+    billableLbs?: number;
+    provider?: string;
+    totalUsd?: number;
+    note?: string;
+    policyNotes?: string[];
+    includedInsuranceUsd?: number;
+  };
 };
 
 function parseCompetitors(raw: string): number[] {
@@ -41,15 +51,17 @@ function parseCompetitors(raw: string): number[] {
 export function PricingTool({ draftId }: { draftId?: string }) {
   const [form, setForm] = useState({
     cost: 20000,
-    chinaShipping: 3000,
-    intlShipping: 12000,
+    chinaShipping: 0,
+    /** 비우면 더베이 항공 요금표(무게)로 자동 계산 */
+    intlShipping: "" as number | "",
+    weightGrams: 500,
     dutyRate: 0.08,
     cardFeeRate: 0.025,
     platformFeeRate: 0.1,
     agencyFee: 3000,
     marginRate: 0.2,
     competitors: "",
-    currency: "KRW",
+    currency: "CNY",
   });
   const [result, setResult] = useState<RecommendResult | null>(null);
   const [message, setMessage] = useState<string | null>(null);
@@ -65,7 +77,9 @@ export function PricingTool({ draftId }: { draftId?: string }) {
         body: JSON.stringify({
           cost: Number(form.cost),
           chinaShipping: Number(form.chinaShipping),
-          intlShipping: Number(form.intlShipping),
+          intlShipping:
+            form.intlShipping === "" ? undefined : Number(form.intlShipping),
+          weightGrams: Number(form.weightGrams),
           dutyRate: Number(form.dutyRate),
           cardFeeRate: Number(form.cardFeeRate),
           platformFeeRate: Number(form.platformFeeRate),
@@ -79,10 +93,21 @@ export function PricingTool({ draftId }: { draftId?: string }) {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "계산 실패");
       setResult(data.result);
+      const quote = data.result?.shippingQuote as
+        | RecommendResult["shippingQuote"]
+        | undefined;
+      const weightLabel =
+        quote?.billableLbs != null
+          ? `${quote.billableLbs}lb`
+          : quote?.billableKg != null
+            ? `${quote.billableKg}kg`
+            : "?";
       setMessage(
         apply && data.draft
           ? `추천가 ${data.result.recommendedSalePriceKrw.toLocaleString("ko-KR")}원을 초안에 적용했습니다.`
-          : "추천가를 계산했습니다.",
+          : quote?.feeKrw != null
+            ? `추천가 계산 · 국제배송 ${quote.feeKrw.toLocaleString("ko-KR")}원 (${quote.provider ?? "요금표"}, ${weightLabel}${quote.totalUsd != null ? `, $${quote.totalUsd}` : ""})`
+            : "추천가를 계산했습니다.",
       );
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "계산 실패");
@@ -104,8 +129,8 @@ export function PricingTool({ draftId }: { draftId?: string }) {
         {(
           [
             ["cost", "상품가격(원가)"],
-            ["chinaShipping", "중국배송비"],
-            ["intlShipping", "국제배송비"],
+            ["weightGrams", "무게(g) — CN:더베이 / US:몰테일"],
+            ["chinaShipping", "중국 내 배송비"],
             ["agencyFee", "대행수수료"],
             ["dutyRate", "관세율 (0~1)"],
             ["cardFeeRate", "카드수수료율"],
@@ -126,6 +151,25 @@ export function PricingTool({ draftId }: { draftId?: string }) {
             />
           </label>
         ))}
+        <label className="block text-sm">
+          <span className="mb-1 block text-zinc-600">
+            국제배송비 (비우면 요금표 자동)
+          </span>
+          <input
+            type="number"
+            step="any"
+            className="w-full rounded-xl border border-zinc-300 px-3 py-2"
+            placeholder="자동(CN:더베이 / US:몰테일)"
+            value={form.intlShipping}
+            onChange={(e) =>
+              setForm((s) => ({
+                ...s,
+                intlShipping:
+                  e.target.value === "" ? "" : Number(e.target.value),
+              }))
+            }
+          />
+        </label>
         <label className="block text-sm">
           <span className="mb-1 block text-zinc-600">통화</span>
           <select
@@ -200,6 +244,15 @@ export function PricingTool({ draftId }: { draftId?: string }) {
                 <dt className="text-zinc-500">국제배송</dt>
                 <dd>{result.intlShippingKrw.toLocaleString("ko-KR")}원</dd>
               </div>
+              {result.shippingQuote?.provider === "malltail" &&
+              result.shippingQuote.policyNotes?.length ? (
+                <div className="col-span-2">
+                  <dt className="text-zinc-500">몰테일 정책</dt>
+                  <dd className="text-zinc-700">
+                    {result.shippingQuote.policyNotes.join(" · ")}
+                  </dd>
+                </div>
+              ) : null}
               <div>
                 <dt className="text-zinc-500">관세</dt>
                 <dd>{result.dutyKrw.toLocaleString("ko-KR")}원</dd>

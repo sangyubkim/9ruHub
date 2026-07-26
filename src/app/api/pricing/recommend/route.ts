@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { Prisma } from "@/generated/prisma/client";
 import { z } from "zod";
 import { prisma } from "@/lib/db";
+import { estimateIntlShipping } from "@/lib/forwarder/shipping-estimate";
 import { defaultPriceRuleFromEnv } from "@/lib/price-engine";
 import { recommendSalePrice } from "@/lib/pricing/recommend";
 import { getDefaultTenantId, getTenantPriceRule } from "@/lib/tenant";
@@ -12,6 +13,9 @@ const bodySchema = z.object({
   cost: z.number().positive(),
   chinaShipping: z.number().nonnegative().optional(),
   intlShipping: z.number().nonnegative().optional(),
+  /** g. 있으면 더베이 항공 요금표로 국제배송 추정 (intlShipping 미지정 시) */
+  weightGrams: z.number().positive().optional(),
+  region: z.enum(["CN", "US", "OTHER"]).optional(),
   duty: z.number().nonnegative().optional(),
   dutyRate: z.number().min(0).max(1).optional(),
   cardFeeRate: z.number().min(0).max(1).optional(),
@@ -46,8 +50,21 @@ export async function POST(request: Request) {
       (ruleRow
         ? 0
         : (envRule.chinaShippingFeeKrw ?? 0));
+
+    const currency = (body.currency ?? "KRW").toUpperCase();
+    const region =
+      body.region ??
+      (currency === "CNY" ? "CN" : currency === "USD" ? "US" : "CN");
+    const shippingQuote =
+      body.intlShipping == null
+        ? estimateIntlShipping({
+            region,
+            weightGrams: body.weightGrams,
+          })
+        : null;
     const intlShipping =
       body.intlShipping ??
+      shippingQuote?.feeKrw ??
       (ruleRow?.shippingFeeKrw ?? envRule.shippingFeeKrw);
 
     const result = recommendSalePrice({
@@ -75,10 +92,25 @@ export async function POST(request: Request) {
       competitorMin: body.competitorMin,
       competitorAvg: body.competitorAvg,
       competitorMax: body.competitorMax,
-      currency: body.currency ?? "KRW",
+      currency,
       usdToKrw: ruleRow ? Number(ruleRow.usdToKrw) : envRule.usdToKrw,
       roundTo: body.roundTo ?? (ruleRow?.roundTo ?? envRule.roundTo),
     });
+
+    const resultWithShipping = {
+      ...result,
+      shippingQuote: shippingQuote ?? {
+        feeKrw: intlShipping,
+        source: body.intlShipping != null ? "manual" : "env",
+      },
+      costBreakdown: {
+        ...result.costBreakdown,
+        shippingQuote: shippingQuote ?? {
+          feeKrw: intlShipping,
+          source: body.intlShipping != null ? "manual" : "env",
+        },
+      },
+    };
 
     let draft = null;
     if (body.applyDraftId) {
@@ -87,26 +119,29 @@ export async function POST(request: Request) {
       });
       if (!existing) {
         return NextResponse.json(
-          { error: "초안을 찾을 수 없습니다.", result },
+          {
+            error: "초안을 찾을 수 없습니다.",
+            result: resultWithShipping,
+          },
           { status: 404 },
         );
       }
       draft = await prisma.productDraft.update({
         where: { id: existing.id },
         data: {
-          salePriceKrw: result.recommendedSalePriceKrw,
+          salePriceKrw: resultWithShipping.recommendedSalePriceKrw,
           costBreakdown: toJson({
             ...(typeof existing.costBreakdown === "object" &&
             existing.costBreakdown !== null
               ? (existing.costBreakdown as Record<string, unknown>)
               : {}),
-            ...result.costBreakdown,
+            ...resultWithShipping.costBreakdown,
           }),
         },
       });
     }
 
-    return NextResponse.json({ result, draft });
+    return NextResponse.json({ result: resultWithShipping, draft });
   } catch (error) {
     const message =
       error instanceof Error ? error.message : "추천가 계산 실패";

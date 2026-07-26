@@ -8,6 +8,7 @@ import {
 import { fetchNaverCompetitorPrices } from "@/lib/discover/demand/naver-competitors";
 import { prisma } from "@/lib/db";
 import { DEFAULT_NOTICE } from "@/lib/draft/detail-template";
+import { estimateIntlShipping } from "@/lib/forwarder/shipping-estimate";
 import { defaultPriceRuleFromEnv } from "@/lib/price-engine";
 import { recommendSalePrice } from "@/lib/pricing/recommend";
 import { getDefaultTenantId, upsertProductFromDraft } from "@/lib/tenant";
@@ -41,6 +42,7 @@ export async function createDraftFromCandidate(
   const cnyToKrw = Number(process.env.CNY_TO_KRW ?? 190);
   const sourcePriceUsdApprox = costCny > 0 ? (costCny * cnyToKrw) / 1380 : 1;
   const envRule = defaultPriceRuleFromEnv();
+  const shippingQuote = estimateIntlShipping({ region: "CN" });
 
   // 발굴 추정가(sellPrice)는 경쟁가로 쓰지 않음 — 네이버 쇼핑 실시세만 사용
   const market = await fetchNaverCompetitorPrices(candidate.keyword);
@@ -51,8 +53,7 @@ export async function createDraftFromCandidate(
           currency: "CNY",
           cnyToKrw,
           chinaShipping: envRule.chinaShippingFeeKrw ?? 0,
-          intlShipping:
-            envRule.intlShippingFeeKrw ?? envRule.shippingFeeKrw,
+          intlShipping: shippingQuote.feeKrw,
           dutyRate: envRule.dutyRate,
           cardFeeRate: envRule.cardFeeRate ?? 0.025,
           platformFeeRate: envRule.platformFeeRate,
@@ -154,6 +155,7 @@ export async function createDraftFromCandidate(
                 : null,
               competitorSource: market.source,
               competitorSampleCount: market.prices.length,
+              shippingQuote,
               isStub: candidate.isStub,
             }
           : {
