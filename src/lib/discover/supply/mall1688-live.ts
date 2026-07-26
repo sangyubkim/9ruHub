@@ -53,19 +53,25 @@ export class Mall1688SupplyLiveAdapter implements SupplyMallAdapter {
   }
 }
 
+/**
+ * 1688 자동 검색은 계정 제재 위험이 있어 기본 OFF.
+ * 명시적으로 DISCOVER_1688_MODE=live 일 때만 라이브 검색.
+ * auto 는 더 이상 라이브를 시도하지 않고 stub 과 동일.
+ */
 export function shouldUse1688LiveSupply(): boolean {
-  const mode = (process.env.DISCOVER_1688_MODE ?? "auto").toLowerCase();
-  if (mode === "stub" || mode === "demo") return false;
-  if (mode === "live") return true;
-  // auto: 라이브 시도 (실패 시 어댑터에서 stub 폴백)
-  return true;
+  const mode = (process.env.DISCOVER_1688_MODE ?? "stub").toLowerCase();
+  return mode === "live";
 }
 
 export function create1688SupplyAdapter(): SupplyMallAdapter {
-  const mode = (process.env.DISCOVER_1688_MODE ?? "auto").toLowerCase();
-  if (mode === "stub" || mode === "demo") {
-    return new Mall1688SupplyStubAdapter();
+  const mode = (process.env.DISCOVER_1688_MODE ?? "stub").toLowerCase();
+  if (mode === "live") {
+    return new Mall1688SupplyLiveAdapter(false);
   }
-  // live: 폴백 없음 / auto: 폴백 있음
-  return new Mall1688SupplyLiveAdapter(mode !== "live");
+  if (mode === "auto") {
+    console.warn(
+      "[discover] DISCOVER_1688_MODE=auto 는 비활성(제재 위험). stub 사용. 실검색은 MODE=live 만 허용.",
+    );
+  }
+  return new Mall1688SupplyStubAdapter();
 }

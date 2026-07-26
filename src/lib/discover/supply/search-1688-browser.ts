@@ -8,13 +8,17 @@ import {
 import { parse1688MarketOfferJson } from "@/lib/discover/supply/search-1688-api";
 
 export function shouldUse1688Browser(): boolean {
-  const mode = (process.env.DISCOVER_1688_BROWSER ?? "auto").toLowerCase();
-  if (mode === "off" || mode === "0" || mode === "false") return false;
-  if (mode === "on" || mode === "1" || mode === "true" || mode === "force") {
-    return true;
+  const mode = (process.env.DISCOVER_1688_BROWSER ?? "off").toLowerCase();
+  // 기본 off — Playwright 자동 접근은 계정 제재 위험
+  if (mode === "off" || mode === "0" || mode === "false" || mode === "auto") {
+    if (mode === "auto") {
+      console.warn(
+        "[1688-browser] DISCOVER_1688_BROWSER=auto 는 비활성. on 으로만 켭니다.",
+      );
+    }
+    return false;
   }
-  // auto: 기본 사용 (fetch 실패 시 호출부에서만 켬)
-  return true;
+  return mode === "on" || mode === "1" || mode === "true" || mode === "force";
 }
 
 /**

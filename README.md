@@ -18,7 +18,7 @@ Amazon US·중국몰 소싱 → 발굴 → 초안 → 채널 등록/동기화 �
 | 네이버 수요 (오픈API 쇼핑 + 검색광고) | **Live** | `NAVER_CLIENT_*`, `NAVER_SEARCHAD_*` |
 | 주간 자동 발굴 (시드 키워드 → 일괄 스캔) | **Live** | `/recommendations` 「이번 주 추천 새로고침」 |
 | 연관 키워드 확장 | **Live(선택)** | 검색광고 연관어, 체크 시 |
-| 1688 공급 자동검색 | **안정화 중** | JSON API → HTML → Playwright · 그래도 실패 시 stub |
+| 1688 공급 자동검색 | **기본 OFF(stub)** | 계정 제재 위험 → URL 수동 첨부 권장 · `MODE=live`만 실검색 |
 | 1688 실원가 | **반자동** | URL + 수동 CNY (페이지 파싱 자주 실패) |
 | **시장성 판정** (최소가 vs 경쟁×1.15) | **완료** | SELL / 합배송필요 / 비추천 · 발굴 점수 반영 · 카드 UI |
 | **더베이 항공 kg 요금표** | **완료** | 셀러 등급 · 무게→국제배송 (기본 500g) |
@@ -215,21 +215,11 @@ npm run smoke:discover
 npm run smoke:1688-search -- 无线风扇
 ```
 
-`DISCOVER_1688_MODE`: `auto`(기본, 라이브→stub) / `live` / `stub`.  
-검색 파이프라인: **JSON API → HTML fetch → Playwright**.  
+`DISCOVER_1688_MODE` 기본값 **`stub`** (자동 검색 OFF).  
+`auto` 도 stub과 동일하게 취급합니다. 실검색은 **`live`를 명시할 때만**.  
 
-1688은 비로그인·봇에 **로그인 점프(_____tmd_____)** 를 걸기 때문에, 실검색에는 세션이 필요합니다.
-
-```bash
-npm run playwright:install
-npm run 1688:session          # 브라우저에서 로그인 → secrets/1688-storage.json
-# .env
-# DISCOVER_1688_STORAGE_STATE=./secrets/1688-storage.json
-npm run smoke:1688-search -- 无线风扇
-```
-
-`DISCOVER_1688_BROWSER=off` 이면 Playwright 생략.  
-세션 없거나 만료되면 `needs_login_session` / stub 폴백.
+권장 운영: 일반 Chrome에서 1688 로그인 → 상품 URL·원가를 카드에 붙이기.  
+Playwright 세션 저장(`npm run 1688:session`)은 `DISCOVER_1688_ALLOW_SESSION=true` 없이 실행되지 않습니다.
 
 ### API
 
