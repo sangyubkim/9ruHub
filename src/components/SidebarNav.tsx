@@ -70,12 +70,15 @@ export function SidebarNav() {
   const [open, setOpen] = useState(false);
 
   const nav = (
-    <nav className="flex flex-col gap-6" aria-label="주요 메뉴">
+    <nav className="flex flex-col gap-4" aria-label="주요 메뉴">
       {navGroups.map((group) => (
-        <div key={group.title}>
-          <p className="mb-2 px-3 text-[11px] font-semibold uppercase tracking-[0.14em] text-zinc-400">
+        <section
+          key={group.title}
+          className="rounded-xl border border-zinc-200/90 bg-zinc-50/80 p-3"
+        >
+          <h2 className="mb-2 border-b border-zinc-200/80 px-1 pb-2 text-sm font-semibold text-zinc-800">
             {group.title}
-          </p>
+          </h2>
           <ul className="space-y-0.5">
             {group.items.map((item) => {
               const active = item.href === activeHref;
@@ -86,8 +89,8 @@ export function SidebarNav() {
                     onClick={() => setOpen(false)}
                     className={
                       active
-                        ? "block rounded-lg bg-sky-50 px-3 py-2 text-sm font-medium text-sky-900 ring-1 ring-sky-200"
-                        : "block rounded-lg px-3 py-2 text-sm text-zinc-700 transition hover:bg-zinc-100 hover:text-zinc-900"
+                        ? "block rounded-lg bg-white px-3 py-2 text-sm font-medium text-sky-900 shadow-sm ring-1 ring-sky-200"
+                        : "block rounded-lg px-3 py-2 text-sm text-zinc-700 transition hover:bg-white hover:text-zinc-900"
                     }
                   >
                     {item.label}
@@ -96,7 +99,7 @@ export function SidebarNav() {
               );
             })}
           </ul>
-        </div>
+        </section>
       ))}
     </nav>
   );
