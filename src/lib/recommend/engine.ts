@@ -5,7 +5,6 @@ import {
 } from "@/generated/prisma/client";
 import { isAmazonFallbackTitle } from "@/lib/amazon/fallback";
 import { prisma } from "@/lib/db";
-import { calculateSalePrice, defaultPriceRuleFromEnv } from "@/lib/price-engine";
 import {
   enrichAmazonMarket,
   priceAmazonUsProduct,
@@ -17,7 +16,7 @@ import {
   scoreCandidate,
   type ScoreBreakdown,
 } from "@/lib/recommend/score";
-import { getDefaultTenantId, getTenantPriceRule } from "@/lib/tenant";
+import { getDefaultTenantId } from "@/lib/tenant";
 
 function toJson(value: unknown): Prisma.InputJsonValue {
   return JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue;
@@ -25,39 +24,6 @@ function toJson(value: unknown): Prisma.InputJsonValue {
 
 function asImageCount(images: unknown): number {
   return Array.isArray(images) ? images.length : 0;
-}
-
-async function resolveCostAndSale(
-  tenantId: string,
-  sourcePriceUsd: number,
-  salePriceKrw?: number | null,
-  costKrw?: number | null,
-) {
-  if (salePriceKrw != null && costKrw != null) {
-    return { salePriceKrw, costKrw };
-  }
-  const ruleRow = await getTenantPriceRule(tenantId);
-  const rule = ruleRow
-    ? {
-        usdToKrw: Number(ruleRow.usdToKrw),
-        marginRate: Number(ruleRow.marginRate),
-        shippingFeeKrw: ruleRow.shippingFeeKrw,
-        agencyFeeKrw: ruleRow.agencyFeeKrw,
-        platformFeeRate: Number(ruleRow.platformFeeRate),
-        dutyRate: Number(ruleRow.dutyRate),
-        roundTo: ruleRow.roundTo,
-      }
-    : defaultPriceRuleFromEnv();
-  const breakdown = calculateSalePrice(sourcePriceUsd, rule);
-  return {
-    salePriceKrw: salePriceKrw ?? breakdown.salePriceKrw,
-    costKrw:
-      costKrw ??
-      breakdown.sourcePriceKrw +
-        breakdown.shippingFeeKrw +
-        breakdown.agencyFeeKrw +
-        breakdown.dutyKrw,
-  };
 }
 
 export async function generateRecommendationsForTenant(options?: {
