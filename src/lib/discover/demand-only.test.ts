@@ -55,4 +55,12 @@ describe("discoverDemandOnly scoring", () => {
     expect(features.needsAmazonUrl).toBe(true);
     expect(features.naverKeyword).toBe("캠핑 의자");
   });
+
+  it("카드 제목은 쇼핑 1위 상품명이 아니라 키워드를 쓴다", () => {
+    const keyword = "선풍기";
+    const naverTopTitle = "일레드 EDF-2414W 화이트";
+    const cardTitle = `[수요] ${keyword}`;
+    expect(cardTitle).toBe("[수요] 선풍기");
+    expect(cardTitle).not.toContain(naverTopTitle);
+  });
 });

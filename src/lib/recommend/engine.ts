@@ -35,7 +35,7 @@ export async function generateRecommendationsForTenant(options?: {
   const limit = options?.limit ?? 20;
   const minScore = options?.minScore ?? 40;
 
-  // Amazon-first: 1688/시드 도매 오퍼 Product는 스캔하지 않음
+  // Amazon-first: 1688/?�드 ?�매 ?�퍼 Product???�캔?��? ?�음
   const products = await prisma.product.findMany({
     where: {
       tenantId,
@@ -49,8 +49,8 @@ export async function generateRecommendationsForTenant(options?: {
       },
       NOT: {
         OR: [
-          { title: { contains: "도매 오퍼" } },
-          { titleKo: { contains: "도매 오퍼" } },
+          { title: { contains: "?�매 ?�퍼" } },
+          { titleKo: { contains: "?�매 ?�퍼" } },
           { title: { contains: "[초안] Amazon US" } },
           { titleKo: { contains: "[초안] Amazon US" } },
           { sourceUrl: { contains: "1688.com" } },
@@ -120,6 +120,12 @@ export async function generateRecommendationsForTenant(options?: {
         naverKeyword: market.keyword,
         targetMarginRate: priced.targetMarginRate,
         shipping: priced.shipping,
+        title: product.title,
+        brand: product.brand,
+        shopTotal: market.shopTotal,
+        uniqueMallCount: market.uniqueMallCount,
+        sameLikelyCount: market.sameLikelyCount,
+        competitorPrices: market.competitorPrices,
       },
     );
 
@@ -172,6 +178,11 @@ export async function createRecommendationFromUrl(
 
   const resolvedTenantId = tenantId ?? (await getDefaultTenantId());
   const fetched = await fetchAmazonUsProduct(url);
+  const shipEligibility = fetched.isFallback
+    ? null
+    : await import("@/lib/amazon/ship-eligibility")
+        .then((m) => m.checkAmazonShipEligibility(fetched.asin))
+        .catch(() => null);
   const priced = await priceAmazonUsProduct(
     resolvedTenantId,
     fetched.sourcePrice,
@@ -279,6 +290,13 @@ export async function createRecommendationFromUrl(
       naverKeyword: market.keyword,
       targetMarginRate: priced.targetMarginRate,
       shipping: priced.shipping,
+      title: fetched.title,
+      brand: fetched.brand,
+      shopTotal: market.shopTotal,
+      uniqueMallCount: market.uniqueMallCount,
+      sameLikelyCount: market.sameLikelyCount,
+      competitorPrices: market.competitorPrices,
+      shipEligibility,
     },
   );
 
@@ -298,8 +316,8 @@ export async function createRecommendationFromUrl(
         : undefined;
     reasonCode = "FALLBACK";
     score = 0;
-    reasonText = `${amazonFallbackReasonMessage(failReason)} 표시된 $29.99는 임시값입니다. Chrome에서 보이는 실가를 초안에 직접 넣거나, 나중에 파싱이 될 때 URL을 다시 넣어 주세요.`;
-    detailHtml = `<section><h2>가격 확인 필요</h2><p>${amazonFallbackReasonMessage(failReason)}</p></section>`;
+    reasonText = `${amazonFallbackReasonMessage(failReason)} ?�시??$29.99???�시값입?�다. Chrome?�서 보이???��?�?초안??직접 ?�거?? ?�중???�싱??????URL???�시 ?�어 주세??`;
+    detailHtml = `<section><h2>가�??�인 ?�요</h2><p>${amazonFallbackReasonMessage(failReason)}</p></section>`;
   } else {
     const copy = await generateRecommendCopy({
       title: product.titleKo ?? product.title,

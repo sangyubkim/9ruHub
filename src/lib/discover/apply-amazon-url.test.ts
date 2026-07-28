@@ -33,6 +33,24 @@ vi.mock("@/lib/amazon/fetch-product", () => ({
   amazonFallbackReasonMessage: (r?: string) => `fallback:${r ?? "unknown"}`,
 }));
 
+vi.mock("@/lib/amazon/ship-eligibility", () => ({
+  checkAmazonShipEligibility: vi.fn(async () => ({
+    us: { country: "US", status: "ok", confidence: "medium", evidence: "In Stock" },
+    kr: {
+      country: "KR",
+      status: "fail",
+      confidence: "medium",
+      evidence: "cannot be shipped",
+    },
+    krDirectShip: false,
+    usForwarderOk: true,
+    confidence: "medium",
+    source: "html",
+    checkedAt: "2026-07-28T00:00:00.000Z",
+    note: "US ok · KR fail",
+  })),
+}));
+
 vi.mock("@/lib/recommend/amazon-enrich", () => ({
   priceAmazonUsProduct: (...args: unknown[]) => priceAmazonUsProduct(...args),
   enrichAmazonMarket: (...args: unknown[]) => enrichAmazonMarket(...args),
@@ -78,9 +96,19 @@ describe("applyAmazonUrlToRecommendation", () => {
     priceAmazonUsProduct.mockResolvedValue({
       salePriceKrw: 55000,
       costKrw: 40000,
+      sourcePriceKrw: 20000,
+      productCostKrw: 22000,
+      dutyKrw: 1600,
+      agencyFeeKrw: 3000,
       intlShippingKrw: 18000,
       minViableSaleKrw: 48000,
+      weightGrams: 800,
       targetMarginRate: 0.2,
+      platformFeeRate: 0.1,
+      cardFeeRate: 0.025,
+      minMarginRate: 0.05,
+      undercutRate: 0.02,
+      roundTo: 100,
       shipping: {
         feeKrw: 18000,
         weightGrams: 800,
@@ -89,7 +117,7 @@ describe("applyAmazonUrlToRecommendation", () => {
         provider: "malltail",
         tier: "general",
         note: null,
-        weightSource: "parsed",
+        weightSource: "amazon_parse",
       },
     });
     enrichAmazonMarket.mockResolvedValue({
@@ -97,6 +125,10 @@ describe("applyAmazonUrlToRecommendation", () => {
       competitorSamples: [],
       marketVerdict: { code: "SELL", label: "판매가능", message: "ok" },
       keyword: "캠핑 의자",
+      shopTotal: 120,
+      uniqueMallCount: 3,
+      sameLikelyCount: 2,
+      competitorPrices: [55000, 59000, 61000],
     });
     upsertSource.mockResolvedValue({ id: "sp-1" });
     upsertProduct.mockResolvedValue({
@@ -161,6 +193,10 @@ describe("applyAmazonUrlToRecommendation", () => {
           })
         : (scoreBreakdown as { features?: { needsAmazonUrl?: boolean } });
     expect(parsed.features?.needsAmazonUrl).toBe(false);
+    expect(
+      (parsed.features as { krDirectShip?: boolean | null } | undefined)
+        ?.krDirectShip,
+    ).toBe(false);
     expect(result.isFallback).toBe(false);
     expect(result.fetched.asin).toBe("B0TESTASIN");
   });
@@ -199,13 +235,14 @@ describe("applyAmazonUrlToRecommendation", () => {
     );
   });
 
-  it("수요 대기 카드가 아니면 거부한다", async () => {
+  it("일반 추천 카드는 거부한다", async () => {
     findUnique.mockResolvedValue({
       id: "rec-2",
       tenantId: "t1",
       reasonCode: "STRONG_BUY",
-      scoreBreakdown: { features: { needsAmazonUrl: false } },
+      scoreBreakdown: { features: { needsAmazonUrl: false, isFallback: false } },
       candidate: null,
+      sourceUrl: "https://www.amazon.com/dp/B0OK",
     });
 
     const { applyAmazonUrlToRecommendation } = await import(
@@ -216,6 +253,57 @@ describe("applyAmazonUrlToRecommendation", () => {
       applyAmazonUrlToRecommendation("rec-2", {
         url: "https://www.amazon.com/dp/B0X",
       }),
-    ).rejects.toThrow(/수요 대기/);
+    ).rejects.toThrow(/수요 대기 또는 가격 폴백/);
+  });
+
+  it("FALLBACK 카드는 기존 URL + 수동 USD로 재적용한다", async () => {
+    findUnique.mockResolvedValue({
+      id: "rec-fb",
+      tenantId: "t1",
+      reasonCode: "FALLBACK",
+      sourceUrl: "https://www.amazon.com/dp/B0BR3LBSMB",
+      externalId: "B0BR3LBSMB",
+      scoreBreakdown: {
+        features: { isFallback: true, needsAmazonUrl: false },
+      },
+      candidate: {
+        id: "cand-fb",
+        keyword: "손선풍기",
+        rawMetrics: {},
+      },
+    });
+    fetchAmazonUsProduct.mockResolvedValue({
+      asin: "B0BR3LBSMB",
+      sourceUrl: "https://www.amazon.com/dp/B0BR3LBSMB",
+      title: "[초안] Amazon US B0BR3LBSMB",
+      brand: null,
+      currency: "USD",
+      sourcePrice: 29.99,
+      inStock: true,
+      images: [],
+      options: [],
+      isFallback: true,
+      raw: { reason: "amazon_robot_block" },
+    });
+
+    const { applyAmazonUrlToRecommendation } = await import(
+      "@/lib/discover/apply-amazon-url"
+    );
+
+    await expect(
+      applyAmazonUrlToRecommendation("rec-fb", {}),
+    ).rejects.toThrow(/실가\(USD\)/);
+
+    const result = await applyAmazonUrlToRecommendation("rec-fb", {
+      costUsd: 41.98,
+      weightGrams: 850,
+    });
+
+    expect(fetchAmazonUsProduct).toHaveBeenCalledWith(
+      "https://www.amazon.com/dp/B0BR3LBSMB",
+    );
+    expect(priceAmazonUsProduct).toHaveBeenCalledWith("t1", 41.98, 850);
+    expect(result.isFallback).toBe(false);
+    expect(result.fetched.weightGrams).toBe(850);
   });
 });

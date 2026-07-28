@@ -94,6 +94,12 @@ export class NaverDemandLiveAdapter implements DemandMallAdapter {
       const title = top
         ? stripHtml(top.title)
         : `[네이버] ${trimmed}`;
+      const demandSearchUrl = `https://search.shopping.naver.com/search/all?query=${encodeURIComponent(trimmed)}`;
+      // 상위 상품 상세 링크 우선, 없으면 키워드 검색
+      const topProductLink =
+        typeof top?.link === "string" && top.link.startsWith("http")
+          ? top.link
+          : null;
 
       // 쇼핑 검색 API는 리뷰/평점을 주지 않음 → 중성값 (점수 왜곡 최소화)
       const reviewCount = 0;
@@ -105,7 +111,7 @@ export class NaverDemandLiveAdapter implements DemandMallAdapter {
         mall: DemandMall.NAVER,
         keyword: trimmed,
         title,
-        demandUrl: `https://search.shopping.naver.com/search/all?query=${encodeURIComponent(trimmed)}`,
+        demandUrl: topProductLink ?? demandSearchUrl,
         externalDemandId: top?.productId
           ? `naver-product-${top.productId}`
           : `naver-kw-${Buffer.from(trimmed).toString("base64url").slice(0, 24)}`,
@@ -124,6 +130,8 @@ export class NaverDemandLiveAdapter implements DemandMallAdapter {
           shopDisplay: shop.display,
           topMall: top?.mallName ?? null,
           topLprice: top ? Number(top.lprice) || null : null,
+          topProductLink,
+          demandSearchUrl,
           searchAdCompIdx: searchAdCompIdx ?? null,
           searchAdError,
           note:

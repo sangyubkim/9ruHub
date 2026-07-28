@@ -11,6 +11,9 @@ describe("parseWeightTextToGrams", () => {
     expect(parseWeightTextToGrams("500 g")).toBe(500);
     expect(parseWeightTextToGrams("1.2 kg")).toBe(1200);
     expect(parseWeightTextToGrams("1 lb")).toBe(454);
+    expect(parseWeightTextToGrams("5.92 ounces")).toBe(
+      Math.round(5.92 * 28.349523125),
+    );
     expect(parseWeightTextToGrams("1 pound 8 ounces")).toBe(
       Math.round(453.59237 + 8 * 28.349523125),
     );

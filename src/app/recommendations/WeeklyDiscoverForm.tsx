@@ -11,6 +11,9 @@ type ScanRow = {
   title: string | null;
   created: number;
   recommendationIds: string[];
+  skippedPriceWar?: boolean;
+  marketType?: string | null;
+  message?: string;
   error?: string;
 };
 
@@ -26,6 +29,9 @@ type ScanSummary = {
   noHitCount: number;
   stubCount: number;
   awaitingAmazonCount?: number;
+  skippedPriceWarCount?: number;
+  scarceCreated?: number;
+  unclearCreated?: number;
   supplyMode?: string;
   replacedIgnored?: number;
   minScore: number;
@@ -46,7 +52,7 @@ const CATEGORY_OPTIONS: Array<{ value: string; label: string }> = [
   { value: "office", label: "사무/디지털" },
 ];
 
-type FilterTab = "all" | "added" | "noHit" | "failed";
+type FilterTab = "all" | "added" | "noHit" | "failed" | "skipped";
 
 export function WeeklyDiscoverForm() {
   const router = useRouter();
@@ -73,8 +79,13 @@ export function WeeklyDiscoverForm() {
     if (tab === "added") {
       return summary.results.filter((r) => r.created > 0 && !r.error);
     }
+    if (tab === "skipped") {
+      return summary.results.filter((r) => Boolean(r.skippedPriceWar));
+    }
     if (tab === "noHit") {
-      return summary.results.filter((r) => !r.error && r.created === 0);
+      return summary.results.filter(
+        (r) => !r.error && r.created === 0 && !r.skippedPriceWar,
+      );
     }
     if (tab === "failed") {
       return summary.results.filter((r) => Boolean(r.error));
@@ -111,6 +122,9 @@ export function WeeklyDiscoverForm() {
         noHitCount: data.noHitCount ?? 0,
         stubCount: data.stubCount ?? 0,
         awaitingAmazonCount: data.awaitingAmazonCount ?? 0,
+        skippedPriceWarCount: data.skippedPriceWarCount ?? 0,
+        scarceCreated: data.scarceCreated ?? 0,
+        unclearCreated: data.unclearCreated ?? 0,
         supplyMode: data.supplyMode ?? "demand_only",
         replacedIgnored: data.replacedIgnored ?? 0,
         minScore: data.minScore ?? 40,
@@ -200,7 +214,7 @@ export function WeeklyDiscoverForm() {
             </p>
           </div>
 
-          <dl className="grid grid-cols-2 gap-2 text-xs sm:grid-cols-4">
+          <dl className="grid grid-cols-2 gap-2 text-xs sm:grid-cols-3 lg:grid-cols-6">
             <div className="rounded-lg bg-emerald-50 px-3 py-2">
               <dt className="text-zinc-500">검색한 키워드</dt>
               <dd className="text-base font-semibold text-emerald-950">
@@ -218,9 +232,19 @@ export function WeeklyDiscoverForm() {
               <dd className="text-base font-semibold text-emerald-950">
                 {summary.addedCount}키워드 / {summary.createdTotal}건
               </dd>
+              <dd className="text-[11px] text-zinc-500">
+                희소 {summary.scarceCreated ?? 0} · 불명확{" "}
+                {summary.unclearCreated ?? 0}
+              </dd>
+            </div>
+            <div className="rounded-lg bg-amber-50 px-3 py-2">
+              <dt className="text-zinc-500">가격경쟁 스킵</dt>
+              <dd className="text-base font-semibold text-amber-950">
+                {summary.skippedPriceWarCount ?? 0}
+              </dd>
             </div>
             <div className="rounded-lg bg-zinc-50 px-3 py-2">
-              <dt className="text-zinc-500">점수 미달(0건)</dt>
+              <dt className="text-zinc-500">점수 미달</dt>
               <dd className="text-base font-semibold text-zinc-800">
                 {summary.noHitCount}
               </dd>
@@ -237,6 +261,10 @@ export function WeeklyDiscoverForm() {
             {(
               [
                 ["added", `반영됨 (${summary.addedCount})`],
+                [
+                  "skipped",
+                  `가격경쟁 스킵 (${summary.skippedPriceWarCount ?? 0})`,
+                ],
                 ["all", `전체 (${summary.scanned})`],
                 ["noHit", `미달 (${summary.noHitCount})`],
                 ["failed", `실패 (${summary.failedCount})`],
@@ -299,9 +327,12 @@ export function WeeklyDiscoverForm() {
                       <td className="px-3 py-2">
                         {row.error ? (
                           <span className="text-red-600">실패</span>
+                        ) : row.skippedPriceWar ? (
+                          <span className="text-amber-800">가격경쟁 스킵</span>
                         ) : row.created > 0 ? (
                           <span className="text-emerald-800">
                             추천 {row.created}건 반영
+                            {row.marketType ? ` · ${row.marketType}` : ""}
                           </span>
                         ) : (
                           <span className="text-zinc-500">
@@ -311,6 +342,11 @@ export function WeeklyDiscoverForm() {
                         {row.error ? (
                           <div className="mt-0.5 max-w-xs truncate text-[11px] text-red-500">
                             {row.error}
+                          </div>
+                        ) : null}
+                        {row.skippedPriceWar && row.message ? (
+                          <div className="mt-0.5 max-w-xs truncate text-[11px] text-amber-700">
+                            {row.message}
                           </div>
                         ) : null}
                       </td>

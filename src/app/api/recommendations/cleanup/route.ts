@@ -12,6 +12,8 @@ const MODES = new Set<CleanupMode>([
   "keep_top",
   "pending_except_ids",
   "purge_ignored",
+  "delete_ids",
+  "delete_not_recommended",
 ]);
 
 export async function POST(request: Request) {
@@ -20,6 +22,7 @@ export async function POST(request: Request) {
       mode?: string;
       keepTop?: number;
       exceptIds?: string[];
+      ids?: string[];
       discoverOnly?: boolean;
     };
 
@@ -28,7 +31,7 @@ export async function POST(request: Request) {
       return NextResponse.json(
         {
           error:
-            "mode는 pending | pending_stub | keep_top | pending_except_ids | purge_ignored",
+            "mode는 pending | pending_stub | keep_top | pending_except_ids | purge_ignored | delete_ids | delete_not_recommended",
         },
         { status: 400 },
       );
@@ -38,6 +41,7 @@ export async function POST(request: Request) {
       mode,
       keepTop: body.keepTop,
       exceptIds: body.exceptIds,
+      ids: body.ids,
       discoverOnly: body.discoverOnly ?? true,
     });
 

@@ -1,5 +1,22 @@
 import { describe, expect, it } from "vitest";
-import { calculateSalePrice } from "./price-engine";
+import {
+  calculateMinViableSaleKrw,
+  calculateSalePrice,
+} from "./price-engine";
+
+describe("calculateMinViableSaleKrw", () => {
+  it("원가와 다르게 수수료·최소마진을 반영한다", () => {
+    // 34436 * 1.05 / 0.875 ≈ 41323.2 → 41400
+    expect(
+      calculateMinViableSaleKrw(34436, {
+        platformFeeRate: 0.1,
+        cardFeeRate: 0.025,
+        minMarginRate: 0.05,
+        roundTo: 100,
+      }),
+    ).toBe(41400);
+  });
+});
 
 describe("calculateSalePrice", () => {
   it("마진/배송/관세를 반영해 판매가를 올림 계산", () => {

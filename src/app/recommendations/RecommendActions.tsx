@@ -61,7 +61,7 @@ export function RecommendActions({
           type="button"
           disabled={busy !== null}
           onClick={() => run("unignore")}
-          className="rounded-full border border-zinc-300 bg-white px-4 py-1.5 text-sm disabled:opacity-40"
+          className="rounded-full border border-zinc-300 bg-white px-5 py-2.5 text-base disabled:opacity-40"
         >
           {busy === "unignore" ? "처리 중…" : "무시 취소"}
         </button>
@@ -69,7 +69,7 @@ export function RecommendActions({
           type="button"
           disabled={busy !== null}
           onClick={() => run("delete")}
-          className="rounded-full border border-red-200 bg-white px-4 py-1.5 text-sm text-red-700 disabled:opacity-40"
+          className="rounded-full border border-red-200 bg-white px-5 py-2.5 text-base text-red-700 disabled:opacity-40"
         >
           {busy === "delete" ? "삭제 중…" : "삭제"}
         </button>
@@ -86,7 +86,7 @@ export function RecommendActions({
         type="button"
         disabled={locked || busy !== null}
         onClick={() => run("accept")}
-        className="rounded-full bg-sky-800 px-4 py-1.5 text-sm text-white disabled:opacity-40"
+        className="rounded-full bg-sky-800 px-5 py-2.5 text-base text-white disabled:opacity-40"
       >
         {busy === "accept"
           ? "초안 생성 중…"
@@ -98,7 +98,7 @@ export function RecommendActions({
         type="button"
         disabled={locked || busy !== null}
         onClick={() => run("ignore")}
-        className="rounded-full border border-zinc-300 bg-white px-4 py-1.5 text-sm disabled:opacity-40"
+        className="rounded-full border border-zinc-300 bg-white px-5 py-2.5 text-base disabled:opacity-40"
       >
         {busy === "ignore" ? "처리 중…" : "무시"}
       </button>
@@ -106,7 +106,7 @@ export function RecommendActions({
         type="button"
         disabled={busy !== null}
         onClick={() => run("delete")}
-        className="rounded-full border border-red-200 bg-white px-4 py-1.5 text-sm text-red-700 disabled:opacity-40"
+        className="rounded-full border border-red-200 bg-white px-5 py-2.5 text-base text-red-700 disabled:opacity-40"
       >
         {busy === "delete" ? "삭제 중…" : "삭제"}
       </button>

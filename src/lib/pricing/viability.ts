@@ -74,7 +74,7 @@ export function evaluateMarketViability(input: {
     return {
       code: "SELL",
       label: "판매 가능",
-      message: `최소 판매가 ${input.minViableSaleKrw.toLocaleString("ko-KR")}원이 경쟁 평균 ${competitorAvg.toLocaleString("ko-KR")}원 × ${ceilingRate}(= ${marketCeilingKrw.toLocaleString("ko-KR")}원) 이하입니다.`,
+      message: `최소 판매가 ${input.minViableSaleKrw.toLocaleString("ko-KR")}원이 경쟁 시세 ${competitorAvg.toLocaleString("ko-KR")}원 × ${ceilingRate}(= ${marketCeilingKrw.toLocaleString("ko-KR")}원) 이하입니다.`,
       competitorAvgKrw: competitorAvg,
       marketCeilingKrw,
       minViableSaleKrw: input.minViableSaleKrw,
@@ -111,7 +111,7 @@ export function evaluateMarketViability(input: {
   return {
     code: "NOT_RECOMMENDED",
     label: "판매 비추천",
-    message: `최소 판매가 ${input.minViableSaleKrw.toLocaleString("ko-KR")}원이 경쟁 평균 ${competitorAvg.toLocaleString("ko-KR")}원 대비 ${(ratioToMarket * 100).toFixed(0)}% 수준(허용 ${(ceilingRate * 100).toFixed(0)}%까지)이라 시장성이 낮습니다. 광고 집행 시 손실 위험이 큽니다.`,
+    message: `최소 판매가 ${input.minViableSaleKrw.toLocaleString("ko-KR")}원이 경쟁 시세 ${competitorAvg.toLocaleString("ko-KR")}원 대비 ${(ratioToMarket * 100).toFixed(0)}% 수준(허용 ${(ceilingRate * 100).toFixed(0)}%까지)이라 시장성이 낮습니다. 광고 집행 시 손실 위험이 큽니다.`,
     competitorAvgKrw: competitorAvg,
     marketCeilingKrw,
     minViableSaleKrw: input.minViableSaleKrw,

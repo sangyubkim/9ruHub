@@ -5,6 +5,7 @@ import {
   SupplyMall,
 } from "@/generated/prisma/client";
 import { fetchAmazonUsProduct } from "@/lib/amazon/fetch-product";
+import { checkAmazonShipEligibility } from "@/lib/amazon/ship-eligibility";
 import type { FetchedProduct } from "@/lib/amazon/types";
 import { localizeTitle } from "@/lib/draft/detail-template";
 import { prisma } from "@/lib/db";
@@ -27,33 +28,65 @@ function asImageCount(images: unknown): number {
   return Array.isArray(images) ? images.length : 0;
 }
 
-function applyManualUsdCost(
+function applyManualOverrides(
   fetched: FetchedProduct,
-  costUsd: number | undefined,
+  input: { costUsd?: number; weightGrams?: number },
 ): FetchedProduct {
-  if (costUsd == null || !Number.isFinite(costUsd) || costUsd <= 0) {
-    return fetched;
-  }
-  return {
-    ...fetched,
-    sourcePrice: costUsd,
-    isFallback: false,
-    raw: {
-      ...(fetched.raw ?? {}),
-      manualCostUsd: costUsd,
+  const next = { ...fetched, raw: { ...(fetched.raw ?? {}) } };
+  let touched = false;
+
+  if (
+    input.costUsd != null &&
+    Number.isFinite(input.costUsd) &&
+    input.costUsd > 0
+  ) {
+    next.sourcePrice = input.costUsd;
+    next.raw = {
+      ...next.raw,
+      manualCostUsd: input.costUsd,
       wasFallback: fetched.isFallback,
-    },
-  };
+    };
+    touched = true;
+  }
+
+  if (
+    input.weightGrams != null &&
+    Number.isFinite(input.weightGrams) &&
+    input.weightGrams > 0
+  ) {
+    next.weightGrams = input.weightGrams;
+    next.raw = {
+      ...next.raw,
+      manualWeightGrams: input.weightGrams,
+    };
+    touched = true;
+  }
+
+  // 수동 원가를 넣으면 폴백($29.99) 해제
+  if (
+    input.costUsd != null &&
+    Number.isFinite(input.costUsd) &&
+    input.costUsd > 0
+  ) {
+    next.isFallback = false;
+  } else if (touched) {
+    // 무게만 수정한 경우는 가격 폴백 상태 유지 가능
+  }
+
+  return next;
 }
 
 /**
- * 주간 수요 추천에 Amazon URL(+선택 USD 원가)을 붙여 몰테일·시세·시장성으로 갱신한다.
+ * Amazon URL(+선택 USD 원가·무게)을 붙여 몰테일·시세·시장성으로 갱신한다.
+ * - 주간 수요 대기(DEMAND_WATCH)
+ * - 가격 폴백(FALLBACK) 카드 재적용(삭제 없이 수동 값으로 수정)
  */
 export async function applyAmazonUrlToRecommendation(
   recommendationId: string,
   input: {
-    url: string;
+    url?: string;
     costUsd?: number;
+    weightGrams?: number;
   },
 ) {
   const recommendation = await prisma.aiRecommendation.findUnique({
@@ -63,7 +96,11 @@ export async function applyAmazonUrlToRecommendation(
   if (!recommendation) throw new Error("추천을 찾을 수 없습니다.");
 
   const breakdownRoot = recommendation.scoreBreakdown as {
-    features?: { needsAmazonUrl?: boolean; naverKeyword?: string };
+    features?: {
+      needsAmazonUrl?: boolean;
+      naverKeyword?: string;
+      isFallback?: boolean;
+    };
   } | null;
   const awaitingInRaw = Boolean(
     recommendation.candidate &&
@@ -74,15 +111,40 @@ export async function applyAmazonUrlToRecommendation(
     recommendation.reasonCode === "DEMAND_WATCH" ||
     breakdownRoot?.features?.needsAmazonUrl === true ||
     awaitingInRaw;
+  const isFallbackCard =
+    recommendation.reasonCode === "FALLBACK" ||
+    breakdownRoot?.features?.isFallback === true;
 
-  if (!needsAmazonUrl) {
+  if (!needsAmazonUrl && !isFallbackCard) {
     throw new Error(
-      "Amazon URL을 붙일 수 있는 수요 대기 추천이 아닙니다. 주간 발굴 카드에만 적용하세요.",
+      "Amazon URL/원가를 적용할 수 있는 카드가 아닙니다. 수요 대기 또는 가격 폴백 카드에만 적용하세요.",
     );
   }
 
-  let fetched = await fetchAmazonUsProduct(input.url);
-  fetched = applyManualUsdCost(fetched, input.costUsd);
+  const url =
+    input.url?.trim() ||
+    recommendation.sourceUrl?.trim() ||
+    recommendation.externalId?.trim() ||
+    "";
+  if (!url) {
+    throw new Error("Amazon 상품 URL 또는 ASIN이 필요합니다.");
+  }
+  if (isFallbackCard && (input.costUsd == null || input.costUsd <= 0)) {
+    throw new Error(
+      "가격을 자동으로 못 읽은 카드입니다. 브라우저에 보이는 실가(USD)를 입력하세요.",
+    );
+  }
+
+  let fetched = await fetchAmazonUsProduct(url);
+  fetched = applyManualOverrides(fetched, {
+    costUsd: input.costUsd,
+    weightGrams: input.weightGrams,
+  });
+
+  // Amazon URL 부착 시 US/KR 배송 가능 여부 best-effort (실패해도 흐름 계속)
+  const shipEligibility = fetched.isFallback
+    ? null
+    : await checkAmazonShipEligibility(fetched.asin).catch(() => null);
 
   const priced = await priceAmazonUsProduct(
     recommendation.tenantId,
@@ -197,6 +259,23 @@ export async function applyAmazonUrlToRecommendation(
       targetMarginRate: priced.targetMarginRate,
       shipping: priced.shipping,
       needsAmazonUrl: false,
+      title: fetched.title,
+      brand: fetched.brand,
+      shopTotal: market.shopTotal,
+      uniqueMallCount: market.uniqueMallCount,
+      sameLikelyCount: market.sameLikelyCount,
+      competitorPrices: market.competitorPrices,
+      searchVolume: recommendation.candidate?.searchVolume ?? null,
+      competition:
+        recommendation.candidate?.competition != null
+          ? Number(recommendation.candidate.competition)
+          : null,
+      seasonalityScore:
+        recommendation.candidate?.seasonalityScore != null
+          ? Number(recommendation.candidate.seasonalityScore)
+          : null,
+      reviewCount: recommendation.candidate?.reviewCount ?? null,
+      shipEligibility,
     },
   );
 
@@ -261,6 +340,9 @@ export async function applyAmazonUrlToRecommendation(
           amazonUrl: fetched.sourceUrl,
           isFallback: fetched.isFallback,
           manualCostUsd: input.costUsd ?? null,
+          manualWeightGrams: input.weightGrams ?? null,
+          shipEligibility: shipEligibility ?? null,
+          krDirectShip: shipEligibility?.krDirectShip ?? null,
         }),
       },
     });

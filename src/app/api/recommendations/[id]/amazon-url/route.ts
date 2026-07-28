@@ -5,35 +5,45 @@ export const dynamic = "force-dynamic";
 
 type Params = { params: Promise<{ id: string }> };
 
+function parsePositiveNumber(
+  value: number | string | undefined,
+  field: string,
+): number | undefined {
+  if (value == null || value === "") return undefined;
+  const n = Number(value);
+  if (!Number.isFinite(n) || n <= 0) {
+    throw new Error(`${field}는 0보다 큰 숫자여야 합니다.`);
+  }
+  return n;
+}
+
 export async function POST(request: Request, { params }: Params) {
   try {
     const { id } = await params;
     const body = (await request.json()) as {
       url?: string;
       costUsd?: number | string;
+      weightGrams?: number | string;
     };
 
-    const url = body.url?.trim();
-    if (!url) {
+    const url = body.url?.trim() || undefined;
+    let costUsd: number | undefined;
+    let weightGrams: number | undefined;
+    try {
+      costUsd = parsePositiveNumber(body.costUsd, "costUsd");
+      weightGrams = parsePositiveNumber(body.weightGrams, "weightGrams");
+    } catch (err) {
       return NextResponse.json(
-        { error: "url(Amazon 상품 URL 또는 ASIN)이 필요합니다." },
+        { error: err instanceof Error ? err.message : "입력값 오류" },
         { status: 400 },
       );
     }
 
-    let costUsd: number | undefined;
-    if (body.costUsd != null && body.costUsd !== "") {
-      const n = Number(body.costUsd);
-      if (!Number.isFinite(n) || n <= 0) {
-        return NextResponse.json(
-          { error: "costUsd는 0보다 큰 숫자여야 합니다." },
-          { status: 400 },
-        );
-      }
-      costUsd = n;
-    }
-
-    const result = await applyAmazonUrlToRecommendation(id, { url, costUsd });
+    const result = await applyAmazonUrlToRecommendation(id, {
+      url,
+      costUsd,
+      weightGrams,
+    });
 
     return NextResponse.json({
       ok: true,
@@ -42,6 +52,7 @@ export async function POST(request: Request, { params }: Params) {
       asin: result.fetched.asin,
       sourceUrl: result.fetched.sourceUrl,
       sourcePriceUsd: result.fetched.sourcePrice,
+      weightGrams: result.fetched.weightGrams ?? null,
       salePriceKrw: result.priced.salePriceKrw,
       costKrw: result.priced.costKrw,
       score: result.score,

@@ -1,5 +1,6 @@
 import { RecommendationStatus } from "@/generated/prisma/client";
 import { prisma } from "@/lib/db";
+import { isNotRecommendedBreakdown } from "@/lib/recommend/sort-recommendations";
 import { getDefaultTenantId } from "@/lib/tenant";
 
 export type CleanupMode =
@@ -7,12 +8,43 @@ export type CleanupMode =
   | "pending_stub"
   | "keep_top"
   | "pending_except_ids"
-  | "purge_ignored";
+  | "purge_ignored"
+  | "delete_ids"
+  | "delete_not_recommended";
 
 /**
  * 추천 목록 정리 — DRAFT_CREATED/ACCEPTED/CONVERTED 는 건드리지 않음.
  * PENDING 만 IGNORED 로 보냄.
  */
+async function deleteRecommendationsAndOrphanCandidates(
+  rows: Array<{ id: string; candidateId: string | null }>,
+) {
+  if (rows.length === 0) {
+    return { deleted: 0, candidatesDeleted: 0 };
+  }
+  const deleted = await prisma.aiRecommendation.deleteMany({
+    where: { id: { in: rows.map((r) => r.id) } },
+  });
+  const candidateIds = [
+    ...new Set(
+      rows
+        .map((r) => r.candidateId)
+        .filter((id): id is string => Boolean(id)),
+    ),
+  ];
+  let candidatesDeleted = 0;
+  for (const candidateId of candidateIds) {
+    const stillLinked = await prisma.aiRecommendation.count({
+      where: { candidateId },
+    });
+    if (stillLinked === 0) {
+      await prisma.productCandidate.delete({ where: { id: candidateId } });
+      candidatesDeleted += 1;
+    }
+  }
+  return { deleted: deleted.count, candidatesDeleted };
+}
+
 export async function cleanupRecommendations(options: {
   mode: CleanupMode;
   tenantId?: string;
@@ -20,6 +52,8 @@ export async function cleanupRecommendations(options: {
   keepTop?: number;
   /** pending_except_ids: 이 ID는 유지 */
   exceptIds?: string[];
+  /** delete_ids: 삭제할 ID */
+  ids?: string[];
   /** candidate 있는 발굴 추천만 */
   discoverOnly?: boolean;
 }) {
@@ -32,6 +66,48 @@ export async function cleanupRecommendations(options: {
     status: RecommendationStatus.PENDING,
     ...(discoverOnly ? { candidateId: { not: null } } : {}),
   };
+
+  if (options.mode === "delete_ids") {
+    const ids = [...new Set((options.ids ?? []).filter(Boolean))];
+    if (ids.length === 0) {
+      return { mode: options.mode, ignored: 0, kept: 0, deleted: 0 };
+    }
+    const rows = await prisma.aiRecommendation.findMany({
+      where: {
+        tenantId,
+        id: { in: ids },
+        ...(discoverOnly ? { candidateId: { not: null } } : {}),
+      },
+      select: { id: true, candidateId: true },
+    });
+    const result = await deleteRecommendationsAndOrphanCandidates(rows);
+    return {
+      mode: options.mode,
+      ignored: 0,
+      kept: 0,
+      deleted: result.deleted,
+      candidatesDeleted: result.candidatesDeleted,
+    };
+  }
+
+  if (options.mode === "delete_not_recommended") {
+    const pending = await prisma.aiRecommendation.findMany({
+      where: baseWhere,
+      select: { id: true, candidateId: true, scoreBreakdown: true },
+      take: 500,
+    });
+    const rows = pending.filter((p) =>
+      isNotRecommendedBreakdown(p.scoreBreakdown),
+    );
+    const result = await deleteRecommendationsAndOrphanCandidates(rows);
+    return {
+      mode: options.mode,
+      ignored: 0,
+      kept: pending.length - result.deleted,
+      deleted: result.deleted,
+      candidatesDeleted: result.candidatesDeleted,
+    };
+  }
 
   if (options.mode === "pending") {
     const result = await prisma.aiRecommendation.updateMany({
@@ -96,36 +172,13 @@ export async function cleanupRecommendations(options: {
     if (ignored.length === 0) {
       return { mode: options.mode, ignored: 0, kept: 0, deleted: 0 };
     }
-
-    const deleted = await prisma.aiRecommendation.deleteMany({
-      where: { id: { in: ignored.map((r) => r.id) } },
-    });
-
-    // 다른 추천이 없는 발굴 후보도 정리
-    const candidateIds = [
-      ...new Set(
-        ignored
-          .map((r) => r.candidateId)
-          .filter((id): id is string => Boolean(id)),
-      ),
-    ];
-    let candidatesDeleted = 0;
-    for (const candidateId of candidateIds) {
-      const stillLinked = await prisma.aiRecommendation.count({
-        where: { candidateId },
-      });
-      if (stillLinked === 0) {
-        await prisma.productCandidate.delete({ where: { id: candidateId } });
-        candidatesDeleted += 1;
-      }
-    }
-
+    const result = await deleteRecommendationsAndOrphanCandidates(ignored);
     return {
       mode: options.mode,
       ignored: 0,
       kept: 0,
-      deleted: deleted.count,
-      candidatesDeleted,
+      deleted: result.deleted,
+      candidatesDeleted: result.candidatesDeleted,
     };
   }
 

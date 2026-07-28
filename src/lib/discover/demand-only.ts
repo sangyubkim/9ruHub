@@ -1,13 +1,13 @@
 import { Prisma, SupplyMall } from "@/generated/prisma/client";
 import { getDemandAdapter } from "@/lib/discover/adapters";
 import { fetchNaverCompetitorPrices } from "@/lib/discover/demand/naver-competitors";
-import { generateDiscoverRecommendCopy } from "@/lib/discover/openai";
 import {
   scoreDiscoverCandidate,
   type DiscoverScoreBreakdown,
 } from "@/lib/discover/score";
 import type { JoinedCandidateMetrics } from "@/lib/discover/types";
 import { prisma } from "@/lib/db";
+import { buildProductViability } from "@/lib/recommend/product-viability";
 import { getDefaultTenantId } from "@/lib/tenant";
 
 export type DemandOnlyResultItem = {
@@ -51,8 +51,10 @@ export async function discoverDemandOnlyByKeyword(
 
   const demandAdapter = getDemandAdapter();
   const demand = await demandAdapter.fetchDemand(trimmed);
+  // 경쟁 시세는 키워드 기준. 쇼핑 1위 상품명은 카드 제목에 쓰지 않음
+  // (예: 키워드「선풍기」1위가 무관한 모델명이면 가이드와 제목이 어긋남)
   const competitorMarket = await fetchNaverCompetitorPrices(trimmed, {
-    sourceTitle: demand.title,
+    sourceTitle: trimmed,
   });
 
   // 공급 미정이라 마진은 중성값 — 점수는 검색량·경쟁·리뷰·시즌 중심
@@ -82,19 +84,81 @@ export async function discoverDemandOnlyByKeyword(
       awaitingAmazon: true,
       created: 0,
       items: [] as DemandOnlyResultItem[],
+      skippedPriceWar: false,
+      marketType: null as string | null,
       message: `수요 점수 ${breakdown.total.toFixed(1)} < minScore ${minScore}`,
     };
   }
 
   const externalSupplyId = awaitAmazonSupplyId(trimmed);
-  const title = `[수요] ${demand.title || trimmed}`;
+  // 카드 제목 = 시드/수요 키워드. 네이버 쇼핑 1위 상품명은 참고용으로만 보관
+  const title = `[수요] ${trimmed}`;
+  const naverTopTitle =
+    demand.title && demand.title.trim() && demand.title.trim() !== trimmed
+      ? demand.title.trim()
+      : null;
+  const demandRaw = (demand.raw ?? {}) as Record<string, unknown>;
+  const demandRawShopTotal =
+    typeof demandRaw.shopTotal === "number" ? demandRaw.shopTotal : null;
+  const naverSearchUrl =
+    typeof demandRaw.demandSearchUrl === "string"
+      ? demandRaw.demandSearchUrl
+      : `https://search.shopping.naver.com/search/all?query=${encodeURIComponent(trimmed)}`;
+  const naverDemandUrl =
+    typeof demand.demandUrl === "string" && demand.demandUrl.startsWith("http")
+      ? demand.demandUrl
+      : naverSearchUrl;
+  const naverProductLink =
+    typeof demandRaw.topProductLink === "string" &&
+    demandRaw.topProductLink.startsWith("http")
+      ? demandRaw.topProductLink
+      : naverDemandUrl !== naverSearchUrl
+        ? naverDemandUrl
+        : null;
+
+  const productViability = buildProductViability({
+    keyword: trimmed,
+    title,
+    shopTotal: competitorMarket.shopTotal ?? demandRawShopTotal,
+    uniqueMallCount: competitorMarket.uniqueMallCount,
+    prices: competitorMarket.prices,
+    sameLikelyCount: competitorMarket.sameLikelyCount,
+    searchVolume: demand.searchVolume,
+    competition: demand.competition,
+    seasonalityScore: demand.seasonalityScore,
+    reviewCount: demand.reviewCount,
+    competitorAvgKrw: competitorMarket.avg,
+    marketVerdictCode:
+      competitorMarket.avg != null ? null : "NO_MARKET_DATA",
+    awaitingSupply: true,
+  });
+
+  // 가격전쟁 + 낮은 추천도 → 목록을 채우지 않음 (스캔 실용성)
+  if (
+    productViability.marketType === "PRICE_WAR" &&
+    productViability.recommendStars <= 2
+  ) {
+    return {
+      tenantId,
+      keyword: trimmed,
+      demandMall: demand.mall,
+      supplyMall: SupplyMall.MALL_1688,
+      isStub: true,
+      awaitingAmazon: true,
+      created: 0,
+      items: [] as DemandOnlyResultItem[],
+      skippedPriceWar: true,
+      marketType: productViability.marketType,
+      message: `가격경쟁 시장 스킵(★${productViability.recommendStars}) — ${productViability.strategy}`,
+    };
+  }
 
   const metrics: JoinedCandidateMetrics = {
     keyword: trimmed,
     title,
     sourceDemandMall: demand.mall,
     sourceSupplyMall: SupplyMall.MALL_1688,
-    demandUrl: demand.demandUrl,
+    demandUrl: naverDemandUrl,
     supplyUrl: null,
     externalDemandId: demand.externalDemandId,
     externalSupplyId,
@@ -115,6 +179,10 @@ export async function discoverDemandOnlyByKeyword(
       demandOnly: true,
       competitorAvgKrw: competitorMarket.avg,
       competitorCount: competitorMarket.prices.length,
+      naverTopTitle,
+      naverDemandUrl,
+      naverSearchUrl,
+      naverProductLink,
       demandRaw: demand.raw ?? null,
     },
   };
@@ -167,13 +235,27 @@ export async function discoverDemandOnlyByKeyword(
     },
   });
 
-  const copy = await generateDiscoverRecommendCopy(metrics, breakdown);
   const reasonText = [
-    `네이버 수요 후보입니다. Amazon.com에서 「${trimmed}」 상품을 찾아 URL을 붙이세요.`,
-    copy.reasonText,
+    `네이버 수요 키워드 「${trimmed}」 후보입니다. Amazon.com에서 같은 키워드로 상품을 찾아 URL을 붙이세요.`,
+    naverTopTitle
+      ? `(참고: 네이버 쇼핑 상위 노출 예 「${naverTopTitle}」 — 반드시 이 모델일 필요는 없습니다.)`
+      : null,
+    `${productViability.marketTypeLabel} · 희소성 ${productViability.scarcity}(${productViability.scarcityScore}점) · ${productViability.strategy}`,
+    `수요 점수 ${breakdown.total.toFixed(1)}점(${breakdown.label}). 검색량 ${metrics.searchVolume.toLocaleString("ko-KR")}, 경쟁 ${metrics.competition.toFixed(2)}.`,
   ]
     .filter(Boolean)
     .join(" ");
+
+  const detailHtml = [
+    "<section><h2>수요 키워드</h2>",
+    `<p><strong>${trimmed}</strong> — Amazon URL을 붙이면 원가·몰테일·시장성을 계산합니다.</p>`,
+    naverTopTitle
+      ? `<p>네이버 쇼핑 상위 예: ${naverTopTitle}</p>`
+      : "",
+    `<p>${productViability.summary}</p>`,
+    `<p>검색량 ${metrics.searchVolume.toLocaleString("ko-KR")} · 경쟁 ${metrics.competition.toFixed(2)} · 점수 ${breakdown.total.toFixed(1)}</p>`,
+    "</section>",
+  ].join("");
 
   const scorePayload = {
     ...breakdown,
@@ -185,10 +267,15 @@ export async function discoverDemandOnlyByKeyword(
       reviewCount: metrics.reviewCount,
       seasonalityScore: metrics.seasonalityScore,
       competitorAvgKrw: competitorMarket.avg,
+      competitorSamples: competitorMarket.samples,
+      shopTotal: competitorMarket.shopTotal ?? demandRawShopTotal,
+      uniqueMallCount: competitorMarket.uniqueMallCount,
       naverKeyword: trimmed,
+      naverTopTitle,
       needsAmazonUrl: true,
       awaitingAmazon: true,
       demandOnly: true,
+      productViability,
     },
   };
 
@@ -211,7 +298,7 @@ export async function discoverDemandOnlyByKeyword(
           scoreBreakdown: toJson(scorePayload),
           reasonCode: "DEMAND_WATCH",
           reasonText,
-          detailHtml: copy.detailHtml,
+          detailHtml,
         },
       })
     : await prisma.aiRecommendation.create({
@@ -226,7 +313,7 @@ export async function discoverDemandOnlyByKeyword(
           status: "PENDING",
           reasonCode: "DEMAND_WATCH",
           reasonText,
-          detailHtml: copy.detailHtml,
+          detailHtml,
         },
       });
 
@@ -240,7 +327,7 @@ export async function discoverDemandOnlyByKeyword(
     reasonText: recommendation.reasonText,
     metrics,
     breakdown,
-    usedGpt: copy.usedGpt,
+    usedGpt: false,
     isStub: true,
   };
 
@@ -253,6 +340,8 @@ export async function discoverDemandOnlyByKeyword(
     awaitingAmazon: true,
     created: 1,
     items: [item],
+    skippedPriceWar: false,
+    marketType: productViability.marketType,
   };
 }
 

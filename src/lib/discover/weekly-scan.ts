@@ -47,6 +47,9 @@ export type WeeklyDiscoverKeywordResult = {
   topLabel: string | null;
   title: string | null;
   recommendationIds: string[];
+  skippedPriceWar?: boolean;
+  marketType?: string | null;
+  message?: string;
   error?: string;
 };
 
@@ -106,6 +109,9 @@ export async function runWeeklyDiscover(options?: WeeklyDiscoverOptions) {
   let createdTotal = 0;
   let stubCount = 0;
   let awaitingAmazonCount = 0;
+  let skippedPriceWarCount = 0;
+  let scarceCreated = 0;
+  let unclearCreated = 0;
 
   for (let i = 0; i < deduped.length; i += 1) {
     const keyword = deduped[i]!;
@@ -126,6 +132,17 @@ export async function runWeeklyDiscover(options?: WeeklyDiscoverOptions) {
       if ("awaitingAmazon" in result && result.awaitingAmazon && result.created > 0) {
         awaitingAmazonCount += 1;
       }
+      const skippedPriceWar =
+        "skippedPriceWar" in result && result.skippedPriceWar === true;
+      if (skippedPriceWar) skippedPriceWarCount += 1;
+      const marketType =
+        "marketType" in result && typeof result.marketType === "string"
+          ? result.marketType
+          : null;
+      if (result.created > 0) {
+        if (marketType === "SCARCE") scarceCreated += 1;
+        else if (marketType === "UNCLEAR") unclearCreated += 1;
+      }
       results.push({
         keyword,
         source,
@@ -135,6 +152,12 @@ export async function runWeeklyDiscover(options?: WeeklyDiscoverOptions) {
         topLabel: top?.label ?? null,
         title: top?.title ?? null,
         recommendationIds: result.items.map((it) => it.recommendationId),
+        skippedPriceWar,
+        marketType,
+        message:
+          "message" in result && typeof result.message === "string"
+            ? result.message
+            : undefined,
       });
     } catch (err) {
       results.push({
@@ -161,7 +184,9 @@ export async function runWeeklyDiscover(options?: WeeklyDiscoverOptions) {
 
   const added = results.filter((r) => r.created > 0 && !r.error);
   const failed = results.filter((r) => Boolean(r.error));
-  const noHit = results.filter((r) => !r.error && r.created === 0);
+  const noHit = results.filter(
+    (r) => !r.error && r.created === 0 && !r.skippedPriceWar,
+  );
   const recommendationIds = results.flatMap((r) => r.recommendationIds);
 
   let replacedIgnored = 0;
@@ -190,6 +215,9 @@ export async function runWeeklyDiscover(options?: WeeklyDiscoverOptions) {
     addedCount: added.length,
     failedCount: failed.length,
     noHitCount: noHit.length,
+    skippedPriceWarCount,
+    scarceCreated,
+    unclearCreated,
     replacedIgnored,
     minScore,
     finishedAt: new Date().toISOString(),

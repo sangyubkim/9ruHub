@@ -17,10 +17,21 @@ import { AttachAmazonUrlForm } from "@/app/recommendations/AttachAmazonUrlForm";
 import { DiscoverKeywordForm } from "@/app/recommendations/DiscoverKeywordForm";
 import { FreshScanBadge } from "@/app/recommendations/FreshScanBadge";
 import { RecommendActions } from "@/app/recommendations/RecommendActions";
+import {
+  RecommendBulkProvider,
+  RecommendBulkToolbar,
+  RecommendSelectCheckbox,
+} from "@/app/recommendations/RecommendBulkControls";
 import { RecommendCleanupBar } from "@/app/recommendations/RecommendCleanupBar";
 import { RecommendEconomics } from "@/app/recommendations/RecommendEconomics";
 import { RecommendGenerateForm } from "@/app/recommendations/RecommendGenerateForm";
 import { WeeklyDiscoverForm } from "@/app/recommendations/WeeklyDiscoverForm";
+import {
+  filterRecommendationsByVerdict,
+  isNotRecommendedBreakdown,
+  parseVerdictFilter,
+  sortRecommendationsByViability,
+} from "@/lib/recommend/sort-recommendations";
 
 export const dynamic = "force-dynamic";
 
@@ -136,14 +147,141 @@ function featureString(breakdown: unknown, key: string): string | null {
   return typeof v === "string" && v.trim() ? v : null;
 }
 
+function readDecisionGuide(breakdown: unknown) {
+  if (!breakdown || typeof breakdown !== "object") return null;
+  const features = (breakdown as { features?: Record<string, unknown> }).features;
+  const g = features?.decisionGuide;
+  if (!g || typeof g !== "object") return null;
+  const o = g as Record<string, unknown>;
+  if (
+    typeof o.recommendedSaleKrw !== "number" ||
+    typeof o.saleLowKrw !== "number" ||
+    typeof o.saleHighKrw !== "number" ||
+    typeof o.expectedProfitKrw !== "number" ||
+    typeof o.grade !== "string"
+  ) {
+    return null;
+  }
+  return g as import("@/lib/recommend/decision-guide").DecisionGuide;
+}
+
+function readProductViability(breakdown: unknown) {
+  if (!breakdown || typeof breakdown !== "object") return null;
+  const features = (breakdown as { features?: Record<string, unknown> }).features;
+  const v = features?.productViability;
+  if (!v || typeof v !== "object") return null;
+  const o = v as Record<string, unknown>;
+  if (
+    typeof o.marketType !== "string" ||
+    typeof o.scarcity !== "string" ||
+    typeof o.priceCompetitiveness !== "string" ||
+    typeof o.recommendStars !== "number"
+  ) {
+    return null;
+  }
+  return v as import("@/lib/recommend/product-viability").ProductViability;
+}
+
+function readSourcingFit(breakdown: unknown) {
+  if (!breakdown || typeof breakdown !== "object") return null;
+  const features = (breakdown as { features?: Record<string, unknown> }).features;
+  const fromRoot = features?.sourcingFit;
+  const fromPv =
+    features?.productViability &&
+    typeof features.productViability === "object"
+      ? (features.productViability as { sourcingFit?: unknown }).sourcingFit
+      : null;
+  const v = fromRoot ?? fromPv;
+  if (!v || typeof v !== "object") return null;
+  const o = v as Record<string, unknown>;
+  if (typeof o.code !== "string" || typeof o.label !== "string") return null;
+  return v as import("@/lib/recommend/sourcing-fit").SourcingFit;
+}
+
+function readShipEligibility(breakdown: unknown) {
+  if (!breakdown || typeof breakdown !== "object") return null;
+  const features = (breakdown as { features?: Record<string, unknown> }).features;
+  const fromRoot = features?.shipEligibility;
+  const fromPv =
+    features?.productViability &&
+    typeof features.productViability === "object"
+      ? (features.productViability as { shipEligibility?: unknown })
+          .shipEligibility
+      : null;
+  const v = fromRoot ?? fromPv;
+  if (!v || typeof v !== "object") return null;
+  const o = v as Record<string, unknown>;
+  if (!o.us || !o.kr) return null;
+  return v as import("@/lib/amazon/ship-eligibility").AmazonShipEligibility;
+}
+
+function numField(root: Record<string, unknown>, key: string): number | null {
+  const v = root[key];
+  return typeof v === "number" && Number.isFinite(v) ? v : null;
+}
+
+/** scoreBreakdown → hover 툴팁용 가감 항목 */
+function readScoreDetail(breakdown: unknown): {
+  kind: "discover" | "amazon" | "other";
+  parts: Array<{ label: string; value: number }>;
+  reasons: string[];
+} | null {
+  if (!breakdown || typeof breakdown !== "object") return null;
+  const root = breakdown as Record<string, unknown>;
+  const reasons = Array.isArray(root.reasons)
+    ? root.reasons.filter((r): r is string => typeof r === "string" && r.trim().length > 0)
+    : [];
+
+  const hasDiscover =
+    numField(root, "volumeScore") != null ||
+    numField(root, "competitionScore") != null;
+  const hasAmazon =
+    numField(root, "priceBandScore") != null ||
+    numField(root, "stockScore") != null;
+
+  if (hasDiscover) {
+    const parts = [
+      { label: "검색량", value: numField(root, "volumeScore") },
+      { label: "경쟁", value: numField(root, "competitionScore") },
+      { label: "마진", value: numField(root, "marginScore") },
+      { label: "평점", value: numField(root, "ratingScore") },
+      { label: "리뷰", value: numField(root, "reviewScore") },
+      { label: "시즌", value: numField(root, "seasonalityScore") },
+      { label: "시장성", value: numField(root, "marketScore") },
+    ]
+      .filter((p): p is { label: string; value: number } => p.value != null)
+      .map((p) => ({ label: p.label, value: p.value }));
+    return { kind: "discover", parts, reasons };
+  }
+
+  if (hasAmazon) {
+    const parts = [
+      { label: "마진", value: numField(root, "marginScore") },
+      { label: "가격대", value: numField(root, "priceBandScore") },
+      { label: "재고", value: numField(root, "stockScore") },
+      { label: "브랜드", value: numField(root, "brandScore") },
+      { label: "이미지", value: numField(root, "imageScore") },
+      { label: "리스팅 감점", value: numField(root, "listingPenalty") },
+      { label: "판매 가산", value: numField(root, "salesBoost") },
+    ]
+      .filter((p): p is { label: string; value: number } => p.value != null)
+      .map((p) => ({ label: p.label, value: p.value }));
+    return { kind: "amazon", parts, reasons };
+  }
+
+  if (reasons.length === 0) return null;
+  return { kind: "other", parts: [], reasons };
+}
+
 type PageProps = {
-  searchParams?: Promise<{ ignored?: string }>;
+  searchParams?: Promise<{ ignored?: string; verdict?: string }>;
 };
 
 export default async function RecommendationsPage({ searchParams }: PageProps) {
   const params = (await searchParams) ?? {};
   const showIgnored =
     params.ignored === "1" || params.ignored === "true";
+  const verdict = parseVerdictFilter(params.verdict);
   const chinaUi = show1688Ui();
 
   const tenantId = await getDefaultTenantId();
@@ -156,7 +294,7 @@ export default async function RecommendationsPage({ searchParams }: PageProps) {
     ? ignoredRecommendationWhere(tenantId)
     : amazonFacingRecommendationWhere(tenantId, true);
 
-  const [items, ignoredCount] = await Promise.all([
+  const [rawItems, ignoredCount] = await Promise.all([
     prisma.aiRecommendation.findMany({
       where: listWhere,
       orderBy: [{ score: "desc" }, { createdAt: "desc" }],
@@ -188,20 +326,39 @@ export default async function RecommendationsPage({ searchParams }: PageProps) {
           },
         },
       },
-      take: 100,
+      take: 200,
     }),
     prisma.aiRecommendation.count({
       where: ignoredCountWhere,
     }),
   ]);
 
+  const sortedItems = sortRecommendationsByViability(rawItems);
+  const items = filterRecommendationsByVerdict(sortedItems, verdict).slice(
+    0,
+    100,
+  );
+  const rejectIds = showIgnored
+    ? []
+    : sortedItems
+        .filter((item) => isNotRecommendedBreakdown(item.scoreBreakdown))
+        .map((item) => item.id);
+
+  const verdictHref = (v: string) => {
+    const q = new URLSearchParams();
+    if (showIgnored) q.set("ignored", "1");
+    if (v !== "all") q.set("verdict", v);
+    const s = q.toString();
+    return s ? `/recommendations?${s}` : "/recommendations";
+  };
+
   return (
     <div className="space-y-8">
-      <section className="max-w-2xl">
-        <h2 className="font-[family-name:var(--font-display)] text-3xl tracking-tight">
+      <section className="max-w-4xl">
+        <h2 className="font-[family-name:var(--font-display)] text-4xl tracking-tight">
           AI 상품 발굴 · 추천
         </h2>
-        <p className="mt-2 text-sm text-zinc-600">
+        <p className="mt-2 text-base text-zinc-600">
           주력은 Amazon US URL 소싱입니다. 상품 링크를 넣으면 원가·몰테일
           국제배송·판매가를 추천합니다. 주간 발굴은 네이버 수요 후보를 만들고,
           운영자가 Amazon URL을 붙여 확정합니다.
@@ -212,20 +369,20 @@ export default async function RecommendationsPage({ searchParams }: PageProps) {
       </section>
 
       <section className="space-y-2">
-        <h3 className="text-sm font-semibold text-zinc-700">
+        <h3 className="text-base font-semibold text-zinc-700">
           Amazon URL / 기존 스캔
         </h3>
-        <p className="text-xs text-zinc-500">
+        <p className="text-sm text-zinc-500">
           amazon.com 상품 URL 또는 ASIN → 추천 카드 · 초안 연결
         </p>
         <RecommendGenerateForm />
       </section>
 
       <section className="space-y-2">
-        <h3 className="text-sm font-semibold text-zinc-700">
+        <h3 className="text-base font-semibold text-zinc-700">
           이번 주 네이버 수요 후보
         </h3>
-        <p className="text-xs text-zinc-500">
+        <p className="text-sm text-zinc-500">
           네이버 검색량·경쟁으로 후보를 만든 뒤, 카드에 Amazon URL을 붙이세요.
         </p>
         <WeeklyDiscoverForm />
@@ -233,7 +390,7 @@ export default async function RecommendationsPage({ searchParams }: PageProps) {
 
       {chinaUi ? (
         <section className="space-y-4 rounded-2xl border border-dashed border-zinc-300 bg-zinc-50/50 p-4">
-          <h3 className="text-sm font-semibold text-zinc-600">
+          <h3 className="text-base font-semibold text-zinc-600">
             레거시 · 네이버↔1688 발굴
           </h3>
           <DiscoverKeywordForm />
@@ -242,33 +399,64 @@ export default async function RecommendationsPage({ searchParams }: PageProps) {
 
       <section className="space-y-3">
         <RecommendCleanupBar
-          activeCount={showIgnored ? 0 : items.length}
+          activeCount={showIgnored ? 0 : sortedItems.length}
           ignoredCount={ignoredCount}
         />
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <h3 className="text-sm font-semibold text-zinc-700">
+          <h3 className="text-base font-semibold text-zinc-700">
             {showIgnored ? "무시된 추천" : "추천 목록"}
+            <span className="ml-2 text-sm font-normal text-zinc-500">
+              (추천도 ★ 높은 순)
+            </span>
           </h3>
           {showIgnored ? (
             <Link
               href="/recommendations"
-              className="text-xs text-sky-800 underline"
+              className="text-sm text-sky-800 underline"
             >
               활성 목록으로
             </Link>
           ) : ignoredCount > 0 ? (
             <Link
               href="/recommendations?ignored=1"
-              className="text-xs text-zinc-500 underline hover:text-sky-800"
+              className="text-sm text-zinc-500 underline hover:text-sky-800"
             >
               무시된 항목 보기 ({ignoredCount})
             </Link>
           ) : null}
         </div>
+        {!showIgnored ? (
+          <div className="flex flex-wrap gap-2 text-sm">
+            {(
+              [
+                ["all", "전체"],
+                ["recommend", "추천 ★≥4"],
+                ["hold", "검토 ★3"],
+                ["reject", "비추천 ★≤2"],
+              ] as const
+            ).map(([key, label]) => (
+              <Link
+                key={key}
+                href={verdictHref(key)}
+                className={`rounded-full px-3 py-1 ${
+                  verdict === key
+                    ? "bg-zinc-900 text-white"
+                    : "bg-zinc-100 text-zinc-700 ring-1 ring-zinc-200"
+                }`}
+              >
+                {label}
+              </Link>
+            ))}
+          </div>
+        ) : null}
+        <RecommendBulkProvider rejectIds={rejectIds}>
+          {!showIgnored && items.length > 0 ? <RecommendBulkToolbar /> : null}
         {items.length === 0 ? (
-          <p className="rounded-2xl border border-dashed border-zinc-300 bg-white/60 p-8 text-sm text-zinc-500">
+          <p className="rounded-2xl border border-dashed border-zinc-300 bg-white/60 p-8 text-base text-zinc-500">
             {showIgnored
               ? "무시된 추천이 없습니다."
+              : verdict !== "all"
+                ? "이 필터에 해당하는 추천이 없습니다."
               : "추천이 없습니다. Amazon URL을 넣거나 「이번 주 추천 새로고침」으로 수요 후보를 만드세요."}
           </p>
         ) : (
@@ -280,15 +468,18 @@ export default async function RecommendationsPage({ searchParams }: PageProps) {
               item.candidate?.marginRate != null
                 ? Number(item.candidate.marginRate)
                 : featureNumber(item.scoreBreakdown, "marginRate");
-            const cost =
-              item.candidate?.costPrice != null
-                ? Number(item.candidate.costPrice)
-                : featureNumber(item.scoreBreakdown, "costPriceCny");
             const costUsd =
               featureNumber(item.scoreBreakdown, "sourcePriceUsd") ??
               (item.product?.sourcePrice != null
                 ? Number(item.product.sourcePrice)
                 : null);
+            // Amazon USD가 있으면 CNY 원가로 오인하지 않음
+            const cost =
+              costUsd != null
+                ? null
+                : item.candidate?.costPrice != null
+                  ? Number(item.candidate.costPrice)
+                  : featureNumber(item.scoreBreakdown, "costPriceCny");
             const sell =
               featureNumber(item.scoreBreakdown, "sellPriceKrw") ??
               item.candidate?.sellPrice ??
@@ -327,6 +518,11 @@ export default async function RecommendationsPage({ searchParams }: PageProps) {
             const needsAmazonUrl =
               item.reasonCode === "DEMAND_WATCH" ||
               featureBool(item.scoreBreakdown, "needsAmazonUrl");
+            const scoreDetail = readScoreDetail(item.scoreBreakdown);
+            const decisionGuide = readDecisionGuide(item.scoreBreakdown);
+            const productViability = readProductViability(item.scoreBreakdown);
+            const sourcingFit = readSourcingFit(item.scoreBreakdown);
+            const shipEligibility = readShipEligibility(item.scoreBreakdown);
 
             const candidateUrl =
               item.candidate?.supplyUrl ?? item.sourceUrl ?? null;
@@ -360,29 +556,32 @@ export default async function RecommendationsPage({ searchParams }: PageProps) {
             return (
               <article
                 key={item.id}
-                className="rounded-2xl border border-zinc-200 bg-white/80 p-5 shadow-sm"
+                className="rounded-2xl border border-zinc-200 bg-white/80 p-6 shadow-sm"
               >
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-2">
+                      {!showIgnored ? (
+                        <RecommendSelectCheckbox id={item.id} />
+                      ) : null}
                       {item.candidate && chinaUi ? (
-                        <p className="text-xs text-zinc-500">
+                        <p className="text-sm text-zinc-500">
                           {item.candidate.sourceDemandMall}↔
                           {item.candidate.sourceSupplyMall}
                         </p>
                       ) : null}
                       {needsAmazonUrl ? (
-                        <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-medium text-amber-900">
+                        <span className="rounded-full bg-amber-100 px-2.5 py-1 text-xs font-medium text-amber-900">
                           Amazon URL 필요
                         </span>
                       ) : null}
                       <FreshScanBadge recommendationId={item.id} />
                     </div>
-                    <h3 className="mt-1 text-xl font-semibold tracking-tight">
+                    <h3 className="mt-1 text-2xl font-semibold tracking-tight">
                       {item.title}
                     </h3>
                     {item.candidate?.keyword ? (
-                      <p className="mt-1 text-xs text-zinc-500">
+                      <p className="mt-1 text-sm text-zinc-500">
                         키워드: {item.candidate.keyword}
                       </p>
                     ) : null}
@@ -409,9 +608,18 @@ export default async function RecommendationsPage({ searchParams }: PageProps) {
                       searchVolume={vol}
                       shipping={shipping}
                       marketVerdict={marketVerdict}
+                      scoreDetail={scoreDetail}
+                      decisionGuide={
+                        isFallbackCard ? null : decisionGuide
+                      }
+                      productViability={productViability}
+                      sourcingFit={isFallbackCard ? null : sourcingFit}
+                      shipEligibility={
+                        isFallbackCard ? null : shipEligibility
+                      }
                     />
                     {item.reasonText ? (
-                      <p className="mt-3 text-sm text-zinc-600">
+                      <p className="mt-3 text-base leading-relaxed text-zinc-600">
                         {item.reasonText}
                       </p>
                     ) : null}
@@ -420,7 +628,7 @@ export default async function RecommendationsPage({ searchParams }: PageProps) {
                         href={amazonOrOtherUrl}
                         target="_blank"
                         rel="noreferrer"
-                        className="mt-2 inline-block text-xs text-sky-800 underline"
+                        className="mt-2 inline-block text-sm text-sky-800 underline"
                       >
                         원본 보기
                       </a>
@@ -429,7 +637,7 @@ export default async function RecommendationsPage({ searchParams }: PageProps) {
                         href={realOfferUrl}
                         target="_blank"
                         rel="noreferrer"
-                        className="mt-2 inline-block text-xs text-sky-800 underline"
+                        className="mt-2 inline-block text-sm text-sky-800 underline"
                       >
                         원본 보기
                       </a>
@@ -438,7 +646,7 @@ export default async function RecommendationsPage({ searchParams }: PageProps) {
                         href={searchHref}
                         target="_blank"
                         rel="noreferrer"
-                        className="mt-2 inline-block text-xs text-sky-800 underline"
+                        className="mt-2 inline-block text-sm text-sky-800 underline"
                       >
                         {isStubCard
                           ? "1688에서 검색 (스텁·실상품 아님)"
@@ -446,7 +654,7 @@ export default async function RecommendationsPage({ searchParams }: PageProps) {
                       </a>
                     ) : null}
                   </div>
-                  <div className="text-right text-xs text-zinc-500">
+                  <div className="text-right text-sm text-zinc-500">
                     <p>상태: {item.status}</p>
                     {item.draftId ? (
                       <Link
@@ -458,11 +666,17 @@ export default async function RecommendationsPage({ searchParams }: PageProps) {
                     ) : null}
                   </div>
                 </div>
-                {needsAmazonUrl &&
+                {(needsAmazonUrl || isFallbackCard) &&
                 item.status !== "IGNORED" &&
                 item.status !== "CONVERTED" ? (
                   <AttachAmazonUrlForm
                     recommendationId={item.id}
+                    mode={isFallbackCard && !needsAmazonUrl ? "fix" : "attach"}
+                    initialUrl={
+                      isFallbackCard
+                        ? (amazonOrOtherUrl ?? item.sourceUrl ?? undefined)
+                        : undefined
+                    }
                     keywordHint={
                       item.candidate?.keyword ?? naverKeyword ?? undefined
                     }
@@ -487,6 +701,7 @@ export default async function RecommendationsPage({ searchParams }: PageProps) {
             );
           })
         )}
+        </RecommendBulkProvider>
       </section>
     </div>
   );

@@ -15,7 +15,12 @@ export function RecommendCleanupBar({
   const [message, setMessage] = useState<string | null>(null);
 
   async function run(
-    mode: "pending_stub" | "keep_top" | "pending" | "purge_ignored",
+    mode:
+      | "pending_stub"
+      | "keep_top"
+      | "pending"
+      | "purge_ignored"
+      | "delete_not_recommended",
     confirmText: string,
   ) {
     if (!window.confirm(confirmText)) return;
@@ -39,7 +44,7 @@ export function RecommendCleanupBar({
         candidatesDeleted?: number;
       };
       if (!res.ok) throw new Error(data.error ?? "정리 실패");
-      if (mode === "purge_ignored") {
+      if (mode === "purge_ignored" || mode === "delete_not_recommended") {
         setMessage(
           `${data.deleted ?? 0}건 삭제` +
             (data.candidatesDeleted
@@ -111,6 +116,21 @@ export function RecommendCleanupBar({
               className="rounded-full border border-zinc-300 bg-white px-3 py-1 text-xs disabled:opacity-40"
             >
               {busy === "pending" ? "처리 중…" : "대기 전부 무시"}
+            </button>
+            <button
+              type="button"
+              disabled={busy !== null}
+              onClick={() =>
+                run(
+                  "delete_not_recommended",
+                  "상품성 추천도 ★2 이하(비추천) 발굴 카드를 DB에서 모두 삭제할까요? (되돌릴 수 없음)",
+                )
+              }
+              className="rounded-full border border-red-300 bg-red-50 px-3 py-1 text-xs font-medium text-red-800 disabled:opacity-40"
+            >
+              {busy === "delete_not_recommended"
+                ? "삭제 중…"
+                : "비추천 전부 삭제"}
             </button>
           </>
         ) : null}

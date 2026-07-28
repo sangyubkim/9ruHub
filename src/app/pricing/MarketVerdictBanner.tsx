@@ -25,16 +25,16 @@ export function MarketVerdictBanner({
   const style = STYLES[verdict.code] ?? STYLES.NO_MARKET_DATA;
 
   return (
-    <div className={`rounded-xl border px-4 py-3 text-sm ${style}`}>
+    <div className={`rounded-xl border px-4 py-3.5 text-base ${style}`}>
       <p className="font-semibold">
         시장성: {verdict.label}
-        <span className="ml-2 text-xs font-normal opacity-70">
+        <span className="ml-2 text-sm font-normal opacity-70">
           {verdict.code}
         </span>
       </p>
-      <p className="mt-1 text-xs leading-relaxed opacity-90">{verdict.message}</p>
+      <p className="mt-1 text-sm leading-relaxed opacity-90">{verdict.message}</p>
       {verdict.competitorAvgKrw != null ? (
-        <p className="mt-2 text-[11px] opacity-80">
+        <p className="mt-2 text-sm opacity-80">
           경쟁평균 {verdict.competitorAvgKrw.toLocaleString("ko-KR")}원
           {verdict.marketCeilingKrw != null
             ? ` · 천장 ${verdict.marketCeilingKrw.toLocaleString("ko-KR")}원`

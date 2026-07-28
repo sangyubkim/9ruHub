@@ -77,10 +77,33 @@ function resolveShipping(rule: PriceRuleInput): {
   };
 }
 
-function roundUpTo(value: Decimal, step: number): number {
-  if (step <= 0) return value.toDecimalPlaces(0, Decimal.ROUND_CEIL).toNumber();
+export function roundUpToKrw(value: Decimal | number, step: number): number {
+  const d = value instanceof Decimal ? value : new Decimal(value);
+  if (step <= 0) return d.toDecimalPlaces(0, Decimal.ROUND_CEIL).toNumber();
   const dStep = new Decimal(step);
-  return value.div(dStep).toDecimalPlaces(0, Decimal.ROUND_CEIL).mul(dStep).toNumber();
+  return d.div(dStep).toDecimalPlaces(0, Decimal.ROUND_CEIL).mul(dStep).toNumber();
+}
+
+/**
+ * 수수료·최소마진을 반영한 손익분기 판매가.
+ * = 랜디드원가 × (1+minMargin) ÷ (1−플랫폼−카드) 후 올림
+ * (원가와 동일하면 채널 수수료만큼 적자이므로 이 값을 최소가로 씀)
+ */
+export function calculateMinViableSaleKrw(
+  landedCostKrw: number,
+  rule: Pick<
+    PriceRuleInput,
+    "platformFeeRate" | "cardFeeRate" | "minMarginRate" | "roundTo"
+  >,
+): number {
+  const minMarginRate = rule.minMarginRate ?? 0.05;
+  const cardFeeRate = rule.cardFeeRate ?? 0;
+  const feeDenom = new Decimal(1)
+    .minus(rule.platformFeeRate)
+    .minus(cardFeeRate);
+  const raw = new Decimal(landedCostKrw).mul(new Decimal(1).plus(minMarginRate));
+  const beforeRound = feeDenom.lte(0) ? raw : raw.div(feeDenom);
+  return roundUpToKrw(beforeRound, rule.roundTo);
 }
 
 /**
@@ -174,7 +197,7 @@ export function calculateSalePrice(
     ? withMargin
     : withMargin.div(platformDenom);
 
-  const salePriceKrw = roundUpTo(beforeRound, rule.roundTo);
+  const salePriceKrw = roundUpToKrw(beforeRound, rule.roundTo);
   const platformFeeKrw = new Decimal(salePriceKrw)
     .mul(rule.platformFeeRate)
     .toDecimalPlaces(0, Decimal.ROUND_HALF_UP)
