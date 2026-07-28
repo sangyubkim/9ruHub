@@ -21,6 +21,6 @@ taskkill /FI "WINDOWTITLE eq 9ruHub-DB*" /F >nul 2>&1
 
 echo.
 echo  Stop requested.
-pause
+if /i not "%~1"=="nopause" pause
 endlocal
 exit /b 0

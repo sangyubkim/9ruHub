@@ -25,6 +25,9 @@ if not exist "node_modules\" (
   )
 )
 
+echo [0/3] Cleaning up existing servers...
+call "%~dp0stop-9ruHub.bat" nopause
+
 echo [1/3] Starting Prisma DB window...
 start "9ruHub-DB" /min cmd.exe /k "cd /d ""%~dp0"" && title 9ruHub-DB && npm.cmd run db:dev"
 
