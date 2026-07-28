@@ -26,9 +26,12 @@ import { RecommendCleanupBar } from "@/app/recommendations/RecommendCleanupBar";
 import { RecommendEconomics } from "@/app/recommendations/RecommendEconomics";
 import { RecommendGenerateForm } from "@/app/recommendations/RecommendGenerateForm";
 import { WeeklyDiscoverForm } from "@/app/recommendations/WeeklyDiscoverForm";
+import { WishlistBulkForm } from "@/app/recommendations/WishlistBulkForm";
 import {
+  filterRecommendationsByProxyBuy,
   filterRecommendationsByVerdict,
   isNotRecommendedBreakdown,
+  parseProxyBuyFilter,
   parseVerdictFilter,
   sortRecommendationsByViability,
 } from "@/lib/recommend/sort-recommendations";
@@ -274,7 +277,11 @@ function readScoreDetail(breakdown: unknown): {
 }
 
 type PageProps = {
-  searchParams?: Promise<{ ignored?: string; verdict?: string }>;
+  searchParams?: Promise<{
+    ignored?: string;
+    verdict?: string;
+    proxyBuy?: string;
+  }>;
 };
 
 export default async function RecommendationsPage({ searchParams }: PageProps) {
@@ -282,6 +289,7 @@ export default async function RecommendationsPage({ searchParams }: PageProps) {
   const showIgnored =
     params.ignored === "1" || params.ignored === "true";
   const verdict = parseVerdictFilter(params.verdict);
+  const proxyBuy = parseProxyBuyFilter(params.proxyBuy);
   const chinaUi = show1688Ui();
 
   const tenantId = await getDefaultTenantId();
@@ -334,23 +342,37 @@ export default async function RecommendationsPage({ searchParams }: PageProps) {
   ]);
 
   const sortedItems = sortRecommendationsByViability(rawItems);
-  const items = filterRecommendationsByVerdict(sortedItems, verdict).slice(
-    0,
-    100,
-  );
+  const items = filterRecommendationsByProxyBuy(
+    filterRecommendationsByVerdict(sortedItems, verdict),
+    proxyBuy,
+  ).slice(0, 100);
   const rejectIds = showIgnored
     ? []
     : sortedItems
         .filter((item) => isNotRecommendedBreakdown(item.scoreBreakdown))
         .map((item) => item.id);
 
-  const verdictHref = (v: string) => {
+  const listHref = (opts: {
+    verdict?: string;
+    proxyBuy?: boolean;
+    ignored?: boolean;
+  }) => {
     const q = new URLSearchParams();
-    if (showIgnored) q.set("ignored", "1");
+    if (opts.ignored ?? showIgnored) q.set("ignored", "1");
+    const v = opts.verdict ?? verdict;
     if (v !== "all") q.set("verdict", v);
+    const pb = opts.proxyBuy ?? proxyBuy === "proxy";
+    if (pb) q.set("proxyBuy", "1");
     const s = q.toString();
     return s ? `/recommendations?${s}` : "/recommendations";
   };
+
+  const verdictHref = (v: string) =>
+    listHref({ verdict: v, proxyBuy: proxyBuy === "proxy" });
+  const proxyBuyHref = listHref({
+    verdict,
+    proxyBuy: proxyBuy !== "proxy",
+  });
 
   return (
     <div className="space-y-8">
@@ -376,6 +398,7 @@ export default async function RecommendationsPage({ searchParams }: PageProps) {
           amazon.com 상품 URL 또는 ASIN → 추천 카드 · 초안 연결
         </p>
         <RecommendGenerateForm />
+        <WishlistBulkForm />
       </section>
 
       <section className="space-y-2">
@@ -447,6 +470,17 @@ export default async function RecommendationsPage({ searchParams }: PageProps) {
                 {label}
               </Link>
             ))}
+            <Link
+              href={proxyBuyHref}
+              className={`rounded-full px-3 py-1 ${
+                proxyBuy === "proxy"
+                  ? "bg-emerald-800 text-white"
+                  : "bg-zinc-100 text-zinc-700 ring-1 ring-zinc-200"
+              }`}
+              title="PROXY_BUY_STRONG · PROXY_BUY 만 표시"
+            >
+              구매대행 적합만
+            </Link>
           </div>
         ) : null}
         <RecommendBulkProvider rejectIds={rejectIds}>
@@ -455,7 +489,7 @@ export default async function RecommendationsPage({ searchParams }: PageProps) {
           <p className="rounded-2xl border border-dashed border-zinc-300 bg-white/60 p-8 text-base text-zinc-500">
             {showIgnored
               ? "무시된 추천이 없습니다."
-              : verdict !== "all"
+              : proxyBuy === "proxy" || verdict !== "all"
                 ? "이 필터에 해당하는 추천이 없습니다."
               : "추천이 없습니다. Amazon URL을 넣거나 「이번 주 추천 새로고침」으로 수요 후보를 만드세요."}
           </p>

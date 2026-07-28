@@ -1,8 +1,13 @@
 /**
- * 추천 목록: 상품성 추천도(★) 우선 정렬 + verdict 필터.
+ * 추천 목록: 상품성 추천도(★) 우선 정렬 + verdict / 구매대행 적합성 필터.
  */
 
 export type RecommendVerdictFilter = "all" | "recommend" | "hold" | "reject";
+
+/** 구매대행 적합 필터 (PROXY_BUY_STRONG · PROXY_BUY) */
+export type ProxyBuyFilter = "all" | "proxy";
+
+const PROXY_BUY_CODES = new Set(["PROXY_BUY_STRONG", "PROXY_BUY"]);
 
 export function readViabilitySortKeys(scoreBreakdown: unknown): {
   recommendStars: number;
@@ -37,6 +42,43 @@ export function readViabilitySortKeys(scoreBreakdown: unknown): {
   }
 
   return { recommendStars, scarcityScore, sourcingFitScore };
+}
+
+/** scoreBreakdown에서 sourcingFit.code 읽기 (features 루트 또는 productViability) */
+export function readSourcingFitCode(scoreBreakdown: unknown): string | null {
+  if (!scoreBreakdown || typeof scoreBreakdown !== "object") return null;
+  const features = (scoreBreakdown as { features?: Record<string, unknown> })
+    .features;
+  if (!features) return null;
+  const fromRoot = features.sourcingFit;
+  const fromPv =
+    features.productViability && typeof features.productViability === "object"
+      ? (features.productViability as { sourcingFit?: unknown }).sourcingFit
+      : null;
+  const v = fromRoot ?? fromPv;
+  if (!v || typeof v !== "object") return null;
+  const code = (v as { code?: unknown }).code;
+  return typeof code === "string" && code.trim() ? code : null;
+}
+
+export function isProxyBuyFitCode(code: string | null | undefined): boolean {
+  return typeof code === "string" && PROXY_BUY_CODES.has(code);
+}
+
+export function parseProxyBuyFilter(
+  raw: string | null | undefined,
+): ProxyBuyFilter {
+  if (raw === "1" || raw === "true" || raw === "proxy") return "proxy";
+  return "all";
+}
+
+export function filterRecommendationsByProxyBuy<
+  T extends { scoreBreakdown: unknown },
+>(items: T[], filter: ProxyBuyFilter): T[] {
+  if (filter === "all") return items;
+  return items.filter((item) =>
+    isProxyBuyFitCode(readSourcingFitCode(item.scoreBreakdown)),
+  );
 }
 
 export function verdictFromStars(stars: number): Exclude<RecommendVerdictFilter, "all"> {

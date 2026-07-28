@@ -1,7 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
+  filterRecommendationsByProxyBuy,
   filterRecommendationsByVerdict,
   isNotRecommendedBreakdown,
+  isProxyBuyFitCode,
+  parseProxyBuyFilter,
+  readSourcingFitCode,
   sortRecommendationsByViability,
   verdictFromStars,
 } from "@/lib/recommend/sort-recommendations";
@@ -47,10 +51,7 @@ describe("sortRecommendationsByViability", () => {
   });
 
   it("희소성 동점이면 sourcingFit 높은 순", () => {
-    const withFit = (
-      id: string,
-      fitScore: number,
-    ) => ({
+    const withFit = (id: string, fitScore: number) => ({
       id,
       score: 50,
       createdAt: "2026-01-01T00:00:00Z",
@@ -79,15 +80,56 @@ describe("filterRecommendationsByVerdict", () => {
       item("h", 3, 0, 1, "2026-01-01T00:00:00Z"),
       item("x", 1, 0, 1, "2026-01-01T00:00:00Z"),
     ];
-    expect(filterRecommendationsByVerdict(items, "recommend").map((i) => i.id)).toEqual([
-      "r",
-    ]);
-    expect(filterRecommendationsByVerdict(items, "hold").map((i) => i.id)).toEqual([
-      "h",
-    ]);
-    expect(filterRecommendationsByVerdict(items, "reject").map((i) => i.id)).toEqual([
-      "x",
-    ]);
+    expect(
+      filterRecommendationsByVerdict(items, "recommend").map((i) => i.id),
+    ).toEqual(["r"]);
+    expect(
+      filterRecommendationsByVerdict(items, "hold").map((i) => i.id),
+    ).toEqual(["h"]);
+    expect(
+      filterRecommendationsByVerdict(items, "reject").map((i) => i.id),
+    ).toEqual(["x"]);
+  });
+});
+
+describe("proxy buy filter", () => {
+  it("PROXY_BUY_STRONG / PROXY_BUY 만 통과", () => {
+    const withCode = (id: string, code: string | null) => ({
+      id,
+      scoreBreakdown: code
+        ? {
+            features: {
+              productViability: {
+                recommendStars: 4,
+                scarcityScore: 50,
+                sourcingFit: { code, score: 90, label: code },
+              },
+            },
+          }
+        : { features: { productViability: { recommendStars: 4 } } },
+    });
+    const items = [
+      withCode("strong", "PROXY_BUY_STRONG"),
+      withCode("proxy", "PROXY_BUY"),
+      withCode("risk", "DIRECT_SHIP_RISK"),
+      withCode("none", null),
+    ];
+    expect(
+      filterRecommendationsByProxyBuy(items, "proxy").map((i) => i.id),
+    ).toEqual(["strong", "proxy"]);
+    expect(filterRecommendationsByProxyBuy(items, "all")).toHaveLength(4);
+  });
+
+  it("features.sourcingFit 루트도 읽는다", () => {
+    expect(
+      readSourcingFitCode({
+        features: { sourcingFit: { code: "PROXY_BUY_STRONG" } },
+      }),
+    ).toBe("PROXY_BUY_STRONG");
+    expect(isProxyBuyFitCode("PROXY_BUY_STRONG")).toBe(true);
+    expect(isProxyBuyFitCode("US_FAIL")).toBe(false);
+    expect(parseProxyBuyFilter("1")).toBe("proxy");
+    expect(parseProxyBuyFilter(undefined)).toBe("all");
   });
 });
 
